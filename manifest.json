@@ -7,7 +7,7 @@
       "name": "HDFilmizle",
       "description": "Direct m3u8 streams, Turkish/English audio tracks, and English subtitles from hdfilmizle.vip",
       "version": "1.0.0",
-      "author": "Antigravity",
+      "author": "KhooLy",
       "supportedTypes": [
         "movie",
         "tv"
