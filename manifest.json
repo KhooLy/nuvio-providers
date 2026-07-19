@@ -1,0 +1,31 @@
+{
+  "name": "HDFilmizle Nuvio Provider",
+  "version": "1.0.0",
+  "scrapers": [
+    {
+      "id": "hdfilmizle",
+      "name": "HDFilmizle",
+      "description": "Direct m3u8 streams, Turkish/English audio tracks, and English subtitles from hdfilmizle.vip",
+      "version": "1.0.0",
+      "author": "Antigravity",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/hdfilmizle.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8",
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "tr",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    }
+  ]
+}
