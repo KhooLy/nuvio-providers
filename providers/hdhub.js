@@ -251,24 +251,29 @@ function headRange(url, range) {
 
 function probeKind(url) {
     return headRange(url, "bytes=0-1").then(function(h) {
-        if (!h || h.status !== 206) return 0;
-        if (!h.total || h.total < 4096) return 2;
+        if (!h || (h.status !== 200 && h.status !== 206)) return 0;
+        if (h.status === 200 || !h.total || h.total < 4096) return 1;
         var at = Math.floor(h.total / 2);
         return headRange(url, "bytes=" + at + "-" + (at + 1)).then(function(m) {
-            return (m && m.status === 206) ? 2 : 0;
+            return (m && m.status === 206) ? 2 : 1;
         });
     });
 }
 
 function probeBest(urls) {
-    var chain = Promise.resolve(null);
+    var best = null;
+    var fallback = null;
+    var chain = Promise.resolve();
     urls.forEach(function(u) {
-        chain = chain.then(function(found) {
-            if (found) return found;
-            return probeKind(u).then(function(kind) { return kind === 2 ? u : null; });
+        chain = chain.then(function() {
+            if (best) return;
+            return probeKind(u).then(function(kind) {
+                if (kind === 2 && !best) best = { url: u, seekable: true };
+                else if (kind === 1 && !fallback) fallback = { url: u, seekable: false };
+            });
         });
     });
-    return chain;
+    return chain.then(function() { return best || fallback; });
 }
 
 function followRedirects(url, depth) {
@@ -293,7 +298,9 @@ function followRedirects(url, depth) {
 function resolveWrapper(url) {
     return followRedirects(url, 6).then(function(direct) {
         if (!direct) return null;
-        return probeKind(direct).then(function(kind) { return kind > 0 ? direct : null; });
+        return probeKind(direct).then(function(kind) {
+            return kind > 0 ? { url: direct, seekable: kind === 2 } : null;
+        });
     });
 }
 
@@ -306,10 +313,10 @@ function pixeldrainSize(apiUrl) {
         .catch(function() { return null; });
 }
 
-function withSize(url, size) {
-    if (size) return Promise.resolve({ url: url, size: size });
-    return pixeldrainSize(url).then(function(extra) {
-        return { url: url, size: extra };
+function withSize(found, size) {
+    if (size) return Promise.resolve({ url: found.url, seekable: found.seekable, size: size });
+    return pixeldrainSize(found.url).then(function(extra) {
+        return { url: found.url, seekable: found.seekable, size: extra };
     });
 }
 
@@ -382,7 +389,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
                         var quality = qualityLabel(it.title);
                         var label = cleanTitle(it.title);
                         var stream = {
-                            name: rankPrefix(quality) + label,
+                            name: rankPrefix(quality) + label + (res.seekable ? "" : " - Non Seekable"),
                             title: label,
                             url: res.url,
                             quality: quality,
