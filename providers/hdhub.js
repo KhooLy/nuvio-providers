@@ -4,6 +4,7 @@ try { cheerio = require("cheerio-without-node-native"); } catch (e) { cheerio = 
 var BASE = "https://4khdhub.one";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
+var ADDON_NAME = "HDHub";
 var MAX_ITEMS = 15;
 var CONCURRENCY = 6;
 
@@ -388,11 +389,14 @@ function getStreams(tmdbId, mediaType, season, episode) {
                         if (!res) return null;
                         var quality = qualityLabel(it.title);
                         var label = cleanTitle(it.title);
+                        var langs = languagesOf(it.title);
+                        var subtitle = label + (langs ? " · " + langs : "") + (res.seekable ? "" : " - Non Seekable");
                         var stream = {
-                            name: rankPrefix(quality) + label + (res.seekable ? "" : " - Non Seekable"),
+                            name: ADDON_NAME,
                             title: label,
                             url: res.url,
-                            quality: quality,
+                            quality: rankPrefix(quality) + quality,
+                            language: subtitle,
                             type: "file",
                             headers: { "User-Agent": USER_AGENT }
                         };
@@ -401,8 +405,6 @@ function getStreams(tmdbId, mediaType, season, episode) {
                             stream.size = size;
                             stream.behaviorHints = { videoSize: res.size, filename: label };
                         }
-                        var lang = languagesOf(it.title);
-                        if (lang) stream.language = lang;
                         return stream;
                     });
                 }).then(function(list) {
