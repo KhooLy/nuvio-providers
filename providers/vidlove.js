@@ -1,12 +1,3 @@
-/**
- * Vidlove Nuvio Provider
- *
- * Resolves playable HLS streams for a TMDB id. Works by calling the internal
- * API for the requested content and returning the master playlist (audio is
- * muxed into the variants) plus subtitles. The exact stream provider is an
- * implementation detail and may change.
- */
-
 var ENDPOINT = "https://api.vidlove.cc";
 
 var HEADERS = {
@@ -45,7 +36,8 @@ function variants(manifest) {
     for (var i = 0; i < lines.length; i++) {
         if (lines[i].indexOf("#EXT-X-STREAM-INF") !== 0) continue;
         var bw = /BANDWIDTH=(\d+)/.exec(lines[i]);
-        var res = /RESOLUTION=\d+x(\d+)/.exec(lines[i]);
+        var res = /RESOLUTION=(\d+)x(\d+)/.exec(lines[i]);
+        var codecs = /CODECS="([^"]+)"/.exec(lines[i]);
         var uri = null;
         for (var j = i + 1; j < lines.length; j++) {
             var next = lines[j].trim();
@@ -55,11 +47,53 @@ function variants(manifest) {
             out.push({
                 uri: uri,
                 bandwidth: bw ? parseInt(bw[1], 10) : 0,
-                height: res ? parseInt(res[1], 10) : 0
+                width: res ? parseInt(res[1], 10) : 0,
+                height: res ? parseInt(res[2], 10) : 0,
+                codecs: codecs ? codecs[1] : ""
             });
         }
     }
     return out;
+}
+
+function labelFor(v) {
+    if (v.width >= 3800) return "4K";
+    if (v.width >= 1900) return "1080p";
+    if (v.width >= 1260) return "720p";
+    if (v.width >= 840) return "480p";
+    if (v.width >= 620) return "360p";
+    return v.height ? v.height + "p" : null;
+}
+
+function audioFromCodecs(codecs) {
+    var c = String(codecs || "").toLowerCase();
+    if (c.indexOf("ec-3") !== -1 || c.indexOf("ac-3") !== -1) return "DD";
+    if (c.indexOf("mp4a") !== -1) return "AAC";
+    if (c.indexOf("opus") !== -1) return "Opus";
+    return null;
+}
+
+function describe(source, list, src) {
+    var sorted = list.slice().sort(function(a, b) { return a.width - b.width; });
+    var labels = [];
+    for (var i = 0; i < sorted.length; i++) {
+        var l = labelFor(sorted[i]);
+        if (l && labels.indexOf(l) === -1) labels.push(l);
+    }
+    var best = null;
+    for (var j = 0; j < list.length; j++) {
+        if (!best || list[j].bandwidth > best.bandwidth) best = list[j];
+    }
+    var quality = best ? (labelFor(best) || "auto") : "auto";
+    var audio = null;
+    for (var k = 0; k < list.length; k++) {
+        audio = audioFromCodecs(list[k].codecs);
+        if (audio) break;
+    }
+    var parts = [source.label || source.source || src];
+    if (labels.length) parts.push(labels.join(" / "));
+    if (audio) parts.push(audio);
+    return { quality: quality, bestUri: best ? best.uri : null, detail: parts.join(" · ") };
 }
 
 function toSubtitles(tracks) {
@@ -88,37 +122,24 @@ function getStreams(tmdbId, mediaType, season, episode) {
         var url = base + "&sources=" + src + (hevc ? "&hevc=" + hevc : "");
         return fetchJson(url).then(function(payload) {
             var source = payload && payload.source;
-            var subs = toSubtitles(payload && payload.subtitles);
+            if (!source) return attempt(i + 1);
 
-            if (source && source.url) {
-                console.log("[VID][OK] source=" + src + " master=" + source.url);
-                return [{
-                    name: "Vidlove",
-                    title: "Auto",
-                    url: source.url,
-                    quality: "auto",
-                    type: "hls",
-                    headers: HEADERS,
-                    subtitles: subs
-                }];
-            }
+            var list = source.manifest ? variants(source.manifest) : [];
+            var info = describe(source, list, src);
+            var playUrl = source.url || info.bestUri;
+            if (!playUrl) return attempt(i + 1);
 
-            var list = source && source.manifest ? variants(source.manifest) : [];
-            if (list.length) {
-                var best = list.reduce(function(a, b) { return b.bandwidth > a.bandwidth ? b : a; });
-                console.log("[VID][OK] source=" + src + " variant=" + best.height + "p");
-                return [{
-                    name: "Vidlove",
-                    title: best.height ? best.height + "p" : "Auto",
-                    url: best.uri,
-                    quality: best.height ? best.height + "p" : "auto",
-                    type: "hls",
-                    headers: HEADERS,
-                    subtitles: subs
-                }];
-            }
-
-            return attempt(i + 1);
+            console.log("[VID][OK] source=" + src + " quality=" + info.quality + " detail=" + info.detail);
+            return [{
+                name: "Vidlove",
+                title: info.detail,
+                url: playUrl,
+                quality: info.quality,
+                language: info.detail,
+                type: "hls",
+                headers: HEADERS,
+                subtitles: toSubtitles(payload && payload.subtitles)
+            }];
         });
     }
 
