@@ -66,9 +66,20 @@ function findPage(html, title, year, isTv) {
 
 function qualityLabel(title) {
     var m = /(2160|1440|1080|720|480|360)p/i.exec(title);
-    if (m) return m[1] + "p";
-    if (/\b4k\b/i.test(title)) return "2160p";
+    if (m) return m[1] === "2160" ? "4K" : m[1] + "p";
+    if (/\b4k\b/i.test(title)) return "4K";
     return "auto";
+}
+
+function parseSize(text) {
+    text = String(text || "");
+    var m = /Download[^\[\n]{0,40}\[([\d.]+)\s*([KMGT]?B)\]/i.exec(text);
+    if (!m) m = /\[\s*([\d.]+)\s*(TB|GB|MB)\s*\]/i.exec(text);
+    if (!m) m = /([\d.]+)\s*(TB|GB|MB)\b/i.exec(text);
+    if (!m) return null;
+    var unit = m[2].toUpperCase();
+    var mult = unit === "TB" ? 1099511627776 : (unit === "GB" ? 1073741824 : 1048576);
+    return Math.round(parseFloat(m[1]) * mult);
 }
 
 function qualityRank(title) {
@@ -143,13 +154,36 @@ function pixelApi(url) {
     return m ? "https://pixeldrain.com/api/file/" + m[1] : url;
 }
 
+function gatherUrls(html) {
+    var text = String(html);
+    var hrefs = [];
+    var seenHref = {};
+    var re = /href\s*=\s*"([^"]+)"/gi;
+    var m;
+    while ((m = re.exec(text)) !== null) {
+        var h = m[1].replace(/&amp;/g, "&");
+        if (!seenHref[h]) { seenHref[h] = true; hrefs.push(h); }
+    }
+    var out = hrefs.slice();
+    var bare = text.match(/https?:\/\/[^\s"'<>\\]+/g) || [];
+    for (var i = 0; i < bare.length; i++) {
+        var b = bare[i].replace(/&amp;/g, "&");
+        var prefix = false;
+        for (var j = 0; j < hrefs.length; j++) {
+            if (hrefs[j].indexOf(b) === 0) { prefix = true; break; }
+        }
+        if (!prefix) out.push(b);
+    }
+    return out;
+}
+
 function collectUrls(html) {
-    var raw = String(html).match(/https?:\/\/[^"'\s<>\\]+/g) || [];
+    var raw = gatherUrls(html);
     var direct = [];
     var wrappers = [];
     var seen = {};
     for (var i = 0; i < raw.length; i++) {
-        var u = raw[i].replace(/&amp;/g, "&").replace(/[),.;]+$/, "");
+        var u = raw[i].replace(/[),.;]+$/, "");
         if (SKIP_HOST.test(u)) continue;
         if (/hubcloud\.ist\/(?:drive|admin|favicon|snvhost|tg\/)/i.test(u)) continue;
         if (WRAPPER.test(u)) {
@@ -158,6 +192,7 @@ function collectUrls(html) {
         }
         if (!DIRECT_HOST.test(u) && !MEDIA_EXT.test(u)) continue;
         if (/pixeldrain\.(?:com|dev)/i.test(u)) u = pixelApi(u);
+        if (u.indexOf(" ") !== -1) u = u.replace(/ /g, "%20");
         if (!seen[u]) { seen[u] = true; direct.push(u); }
     }
     direct.sort(function(a, b) { return priority(b) - priority(a); });
@@ -280,6 +315,22 @@ function resolveWrapper(url) {
     });
 }
 
+function pixeldrainSize(apiUrl) {
+    var m = /pixeldrain\.com\/api\/file\/([A-Za-z0-9]+)/i.exec(apiUrl);
+    if (!m) return Promise.resolve(null);
+    return fetch("https://pixeldrain.com/api/file/" + m[1] + "/info", { headers: { "User-Agent": USER_AGENT } })
+        .then(function(r) { return r.json(); })
+        .then(function(j) { return (j && j.size) ? j.size : null; })
+        .catch(function() { return null; });
+}
+
+function withSize(url, size) {
+    if (size) return Promise.resolve({ url: url, size: size });
+    return pixeldrainSize(url).then(function(extra) {
+        return { url: url, size: extra };
+    });
+}
+
 function resolveItem(item) {
     return fetchText(item.url).then(function(html) {
         if (!html) return null;
@@ -290,14 +341,15 @@ function resolveItem(item) {
             if (!gm) return null;
             var gamerxyt = gm[1].replace(/&amp;/g, "&");
             return fetchText(gamerxyt, { "User-Agent": USER_AGENT, "Referer": hub }).then(function(gx) {
+                var size = parseSize(gx || "");
                 var urls = collectUrls(gx || "");
                 return probeBest(urls.direct).then(function(found) {
-                    if (found) return found;
+                    if (found) return withSize(found, size);
                     var chain = Promise.resolve(null);
                     urls.wrappers.forEach(function(w) {
                         chain = chain.then(function(res) { return res ? res : resolveWrapper(w); });
                     });
-                    return chain;
+                    return chain.then(function(res) { return res ? withSize(res, size) : null; });
                 });
             });
         });
@@ -343,17 +395,19 @@ function getStreams(tmdbId, mediaType, season, episode) {
                 console.log("[HDH][PICK] " + items.length + (isTv ? (" S" + season + "E" + episode) : ""));
                 if (items.length === 0) return [];
                 return mapLimit(items, CONCURRENCY, function(it) {
-                    return resolveItem(it).then(function(url) {
-                        if (!url) return null;
+                    return resolveItem(it).then(function(res) {
+                        if (!res) return null;
                         var quality = qualityLabel(it.title);
-                        return {
+                        var stream = {
                             name: "HDHub",
                             title: quality + " · " + cleanTitle(it.title),
-                            url: url,
+                            url: res.url,
                             quality: quality,
                             type: "file",
                             headers: { "User-Agent": USER_AGENT }
                         };
+                        if (res.size) stream.size = res.size;
+                        return stream;
                     });
                 }).then(function(list) {
                     var streams = list.filter(function(s) { return s; });
