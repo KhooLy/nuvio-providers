@@ -6,7 +6,6 @@ var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
 var MAX_ITEMS = 15;
 var CONCURRENCY = 6;
-var PROBE_BYTES = 2048;
 
 var DIRECT_HOST = /(cloudflarestorage|pixeldrain\.(?:com|dev)|workers\.dev)/i;
 var MEDIA_EXT = /\.(mkv|mp4|avi|zip|rar|m3u8)(?:[?"'#]|$)/i;
@@ -96,6 +95,32 @@ function cleanTitle(title) {
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 200);
+}
+
+function humanSize(bytes) {
+    if (!bytes) return null;
+    var gb = bytes / 1073741824;
+    if (gb >= 1) return gb.toFixed(2) + " GB";
+    return (bytes / 1048576).toFixed(1) + " MB";
+}
+
+var LANG_NAMES = ["Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Turkish", "Türkçe", "Korean", "Japanese", "Spanish", "French", "German", "Italian", "Portuguese", "Arabic"];
+
+function languagesOf(title) {
+    var found = [];
+    for (var i = 0; i < LANG_NAMES.length; i++) {
+        if (new RegExp("\\b" + LANG_NAMES[i] + "\\b", "i").test(title)) found.push(LANG_NAMES[i]);
+    }
+    return found.length ? found.join(", ") : null;
+}
+
+function rankPrefix(quality) {
+    if (quality === "4K") return "1. ";
+    if (quality === "1440p") return "2. ";
+    if (quality === "1080p") return "3. ";
+    if (quality === "720p") return "4. ";
+    if (quality === "480p") return "5. ";
+    return "9. ";
 }
 
 function parseItems(html) {
@@ -208,85 +233,42 @@ function priority(url) {
     return 0;
 }
 
-function classify(status, ct, buf) {
-    ct = String(ct || "").toLowerCase();
-    var bytes = buf ? new Uint8Array(buf) : new Uint8Array(0);
-    if (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return 2;
-    if (bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) return 2;
-    if (status === 404 || status === 410) return 0;
-    var head = bytes.length ? new TextDecoder().decode(bytes.slice(0, 400)) : "";
-    if (/notentitled|enable r2|not_found|not found|no longer|removed|deleted|invalid link/i.test(head)) return 0;
-    if (status !== 200 && status !== 206) return 1;
-    if (/video\/|octet-stream|matroska/i.test(ct)) return 2;
-    return 1;
-}
-
-function readHead(r, limit) {
-    if (!r.body || typeof r.body.getReader !== "function") {
-        var len = parseInt(r.headers.get("content-length") || "0", 10);
-        if (len > 0 && len <= limit * 2) {
-            return r.arrayBuffer().catch(function() { return null; });
-        }
-        return Promise.resolve(null);
-    }
-    var reader = r.body.getReader();
-    var chunks = [];
-    var total = 0;
-    function pump() {
-        return reader.read().then(function(res) {
-            if (res.done) return;
-            var v = res.value;
-            if (v && v.length) {
-                var take = Math.min(v.length, limit - total);
-                if (take > 0) { chunks.push(v.subarray(0, take)); total += take; }
-            }
-            if (total >= limit) return;
-            return pump();
-        });
-    }
-    return pump().then(function() {
-        try { reader.cancel(); } catch (e) {}
-        if (!chunks.length) return null;
-        var out = new Uint8Array(total);
-        var off = 0;
-        for (var i = 0; i < chunks.length; i++) { out.set(chunks[i], off); off += chunks[i].length; }
-        return out.buffer;
-    }).catch(function() { try { reader.cancel(); } catch (e) {} return null; });
+function headRange(url, range) {
+    var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var opts = { headers: { "User-Agent": USER_AGENT, "Range": range }, redirect: "follow" };
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch(url, opts).then(function(r) {
+        var cr = r.headers.get("content-range") || "";
+        try {
+            if (r.body && r.body.getReader) r.body.getReader().cancel();
+            else if (r.body && r.body.cancel) r.body.cancel();
+        } catch (e) {}
+        if (ctrl) ctrl.abort();
+        var m = /\/(\d+)\s*$/.exec(cr);
+        return { status: r.status, total: m ? parseInt(m[1], 10) : null };
+    }).catch(function() { return null; });
 }
 
 function probeKind(url) {
-    var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
-    var opts = { headers: { "User-Agent": USER_AGENT, "Range": "bytes=0-" + (PROBE_BYTES - 1) }, redirect: "follow" };
-    if (ctrl) opts.signal = ctrl.signal;
-    return fetch(url, opts).then(function(r) {
-        var status = r.status;
-        var ct = r.headers.get("content-type");
-        var len = parseInt(r.headers.get("content-length") || "0", 10);
-        if (status === 200 && len > 4 * 1024 * 1024) {
-            if (ctrl) ctrl.abort();
-            return classify(status, ct, null);
-        }
-        return readHead(r, PROBE_BYTES).then(function(buf) {
-            if (ctrl) ctrl.abort();
-            return classify(status, ct, buf);
+    return headRange(url, "bytes=0-1").then(function(h) {
+        if (!h || h.status !== 206) return 0;
+        if (!h.total || h.total < 4096) return 2;
+        var at = Math.floor(h.total / 2);
+        return headRange(url, "bytes=" + at + "-" + (at + 1)).then(function(m) {
+            return (m && m.status === 206) ? 2 : 0;
         });
-    }).catch(function() { return 1; });
+    });
 }
 
 function probeBest(urls) {
-    var transient = null;
     var chain = Promise.resolve(null);
     urls.forEach(function(u) {
         chain = chain.then(function(found) {
             if (found) return found;
-            return probeKind(u).then(function(kind) {
-                if (kind === 2) return u;
-                if (kind === 1 && !transient) transient = u;
-                return null;
-            });
+            return probeKind(u).then(function(kind) { return kind === 2 ? u : null; });
         });
     });
-    return chain.then(function(found) { return found || transient; });
+    return chain;
 }
 
 function followRedirects(url, depth) {
@@ -398,15 +380,22 @@ function getStreams(tmdbId, mediaType, season, episode) {
                     return resolveItem(it).then(function(res) {
                         if (!res) return null;
                         var quality = qualityLabel(it.title);
+                        var label = cleanTitle(it.title);
                         var stream = {
-                            name: "HDHub",
-                            title: quality + " · " + cleanTitle(it.title),
+                            name: rankPrefix(quality) + label,
+                            title: label,
                             url: res.url,
                             quality: quality,
                             type: "file",
                             headers: { "User-Agent": USER_AGENT }
                         };
-                        if (res.size) stream.size = res.size;
+                        var size = humanSize(res.size);
+                        if (size) {
+                            stream.size = size;
+                            stream.behaviorHints = { videoSize: res.size, filename: label };
+                        }
+                        var lang = languagesOf(it.title);
+                        if (lang) stream.language = lang;
                         return stream;
                     });
                 }).then(function(list) {
