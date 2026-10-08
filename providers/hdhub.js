@@ -1,14 +1,21 @@
 /**
  * HDHub Nuvio Provider
  *
- * Resolves direct MKV links from the 4khdhub download site for a TMDB id.
+ * Resolves direct file links from the 4khdhub download site for a TMDB id.
  * Chain: title search -> download item -> redirect host -> hub -> direct file.
- * Only direct file links are returned (season archives are skipped).
+ * Direct files are served from rotating worker/CDN hosts, so every candidate
+ * is probed and only playable ones are returned. Season archives are skipped.
  */
 
 var BASE = "https://4khdhub.one";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
+
+var NAV = [
+    "HDhub4u.ms", "hubcloud.cx", "snvhost.com", "one.one.one.one", "tinyurl.com",
+    "t.me", "googletagmanager", "googletag", "jsdelivr", "unpkg", "fontawesome",
+    "cloudflareinsights", "a-ads", "adplox", "google", "gstatic", "histats", "w3.org"
+];
 
 function get(url, headers) {
     return fetch(url, { headers: headers || { "User-Agent": USER_AGENT } })
@@ -48,7 +55,6 @@ function findPage(html, title, year, isTv) {
         var hit = 0;
         for (var i = 0; i < tokens.length; i++) if (tokens[i] && slug.indexOf(tokens[i]) !== -1) hit++;
         score += 30 * hit / Math.max(1, tokens.length);
-        if (year && href.indexOf(String(year)) !== -1) score += 5;
         if (!best || score > best.score) best = { score: score, href: href };
     }
     return best ? BASE + best.href : null;
@@ -69,24 +75,45 @@ function decodeGreenmotors(html) {
     return atob(json.o);
 }
 
-function resolveDownload(greenmotorsUrl) {
+function candidatesFrom(html) {
+    var out = [];
+    var seen = {};
+    var re = /href="(https?:\/\/[^"]+)"/g;
+    var m;
+    while ((m = re.exec(html)) !== null) {
+        var u = m[1];
+        if (NAV.some(function(n) { return u.indexOf(n) !== -1; })) continue;
+        if (u.indexOf("cloudflarestorage") === -1 &&
+            u.indexOf(".workers.dev/") === -1 &&
+            u.indexOf("pixeldrain.") === -1) continue;
+        var pm = u.match(/pixeldrain\.(?:com|dev)\/(?:u|file)\/([A-Za-z0-9]+)/);
+        var v = pm ? ("https://pixeldrain.com/api/file/" + pm[1]) : u;
+        if (!seen[v]) { seen[v] = true; out.push(v); }
+    }
+    return out;
+}
+
+function resolveItem(greenmotorsUrl) {
     return get(greenmotorsUrl).then(function(html) {
         var hub = decodeGreenmotors(html);
-        if (!hub) return null;
+        if (!hub) return [];
         return get(hub, { "User-Agent": USER_AGENT, "Referer": greenmotorsUrl }).then(function(hubHtml) {
             var gm = /href="(https?:\/\/[^"]*hubcloud\.php\?[^"]+)"/.exec(hubHtml);
-            if (!gm) return null;
-            var gamerxyt = gm[1].replace(/&amp;/g, "&");
-            return get(gamerxyt, { "User-Agent": USER_AGENT, "Referer": hub }).then(function(gx) {
-                var r2 = /href="(https:\/\/[^"]*cloudflarestorage[^"]+)"/.exec(gx);
-                if (r2) {
-                    var name = /filename%3D%22([^%]+)/.exec(r2[1]);
-                    return { url: r2[1], name: name ? decodeURIComponent(name[1]) : null };
-                }
-                return null;
+            if (!gm) return [];
+            var gx = gm[1].replace(/&amp;/g, "&");
+            return get(gx, { "User-Agent": USER_AGENT, "Referer": hub }).then(function(gxHtml) {
+                return candidatesFrom(gxHtml);
             });
         });
-    });
+    }).catch(function() { return []; });
+}
+
+function probe(url) {
+    return fetch(url, { headers: { "User-Agent": USER_AGENT, "Range": "bytes=0-1023" } })
+        .then(function(r) {
+            return { url: url, ok: r.ok, type: r.headers.get("content-type") || "" };
+        })
+        .catch(function() { return { url: url, ok: false, type: "" }; });
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
@@ -94,11 +121,9 @@ function getStreams(tmdbId, mediaType, season, episode) {
     return tmdbTitle(tmdbId, mediaType).then(function(meta) {
         if (!meta) return [];
         var title = meta.title || meta.name || meta.original_title || meta.original_name;
-        var year = (meta.release_date || meta.first_air_date || "").split("-")[0];
         if (!title) return [];
-        var searchUrl = BASE + "/?s=" + encodeURIComponent(title);
-        return get(searchUrl).then(function(html) {
-            var pageUrl = findPage(html, title, year, isTv);
+        return get(BASE + "/?s=" + encodeURIComponent(title)).then(function(html) {
+            var pageUrl = findPage(html, title, null, isTv);
             if (!pageUrl) return [];
             console.log("[HDH][PAGE] " + pageUrl);
             return get(pageUrl).then(function(pageHtml) {
@@ -110,22 +135,30 @@ function getStreams(tmdbId, mediaType, season, episode) {
                     if (!seen[m[1]]) { seen[m[1]] = true; links.push(m[1]); }
                 }
                 console.log("[HDH][ITEMS] " + links.length);
-                var picks = links.slice(0, 4);
-                return Promise.all(picks.map(resolveDownload)).then(function(results) {
-                    var streams = [];
-                    for (var i = 0; i < results.length; i++) {
-                        var r = results[i];
-                        if (!r || !r.url) continue;
-                        streams.push({
-                            name: "HDHub",
-                            title: r.name || "Direct",
-                            url: r.url,
-                            quality: "auto",
-                            type: "file",
-                            headers: { "User-Agent": USER_AGENT }
+                return Promise.all(links.slice(0, 6).map(resolveItem)).then(function(lists) {
+                    var all = [];
+                    var uniq = {};
+                    lists.forEach(function(list) {
+                        list.forEach(function(u) { if (!uniq[u]) { uniq[u] = true; all.push(u); } });
+                    });
+                    console.log("[HDH][CANDIDATES] " + all.length);
+                    if (!all.length) return [];
+                    return Promise.all(all.slice(0, 14).map(probe)).then(function(results) {
+                        var streams = [];
+                        results.forEach(function(r) {
+                            if (r.ok && r.type.indexOf("text/html") === -1) {
+                                streams.push({
+                                    name: "HDHub",
+                                    title: "Direct",
+                                    url: r.url,
+                                    quality: "auto",
+                                    type: "file",
+                                    headers: { "User-Agent": USER_AGENT }
+                                });
+                            }
                         });
-                    }
-                    return streams;
+                        return streams;
+                    });
                 });
             });
         });
