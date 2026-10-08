@@ -1,6 +1,7 @@
-var cheerio = require("cheerio-without-node-native");
+var cheerio;
+try { cheerio = require("cheerio-without-node-native"); } catch(e) { cheerio = require("cheerio"); }
 
-var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
+var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "YOUR_TMDB_API_KEY";
 var BASE_URL = "https://www.hdfilmizle.vip";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
@@ -162,6 +163,190 @@ function extractOrigin(url) {
     return m ? m[1] : "";
 }
 
+function absolutize(uri, baseDir) {
+    if (!uri) return "";
+    if (uri.indexOf("http") === 0) return uri;
+    if (uri.indexOf("/") === 0) return extractOrigin(baseDir) + uri;
+    return baseDir + "/" + uri;
+}
+
+function qualityLabel(width, height) {
+    if (width >= 1900) return "1080p";
+    if (width >= 1260) return "720p";
+    if (width >= 840) return "480p";
+    if (width >= 620) return "360p";
+    if (height > 0) return height + "p";
+    return null;
+}
+
+var LANG_LABELS = { tr: "Türkçe", en: "İngilizce", dual: "Çift Dil" };
+
+function resolveEmbeds(html) {
+    var embeds = [];
+    var partsMatch = html.match(/let\s+parts\s*=\s*(\[[\s\S]*?\]);/);
+    if (partsMatch) {
+        try {
+            var parts = JSON.parse(partsMatch[1]);
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                var srcMatch = String(part.data || "").match(/src=\\?"([\s\S]*?)\\?"/);
+                if (!srcMatch) continue;
+                var src = srcMatch[1].replace(/\\\//g, "/");
+                if (src.indexOf("//") === 0) src = "https:" + src;
+                if (src.indexOf("http") !== 0) continue;
+                embeds.push({ url: src, name: part.name || ("Kaynak " + (i + 1)), lang: part.lang || null });
+            }
+        } catch(e) {}
+    }
+    if (embeds.length > 0) return embeds;
+
+    var $ = cheerio.load(html);
+    var fallback = null;
+    var vpx = $("iframe.vpx");
+    if (vpx.length) fallback = vpx.attr("data-src") || vpx.attr("src");
+    if (!fallback) {
+        $("iframe").each(function(idx, elem) {
+            if (fallback) return;
+            var src = $(elem).attr("src") || $(elem).attr("data-src") || "";
+            if (src.indexOf("vidrame") !== -1 || src.indexOf("vidmoxy") !== -1 || src.indexOf("/vr/") !== -1) {
+                fallback = src;
+            }
+        });
+    }
+    if (fallback) {
+        if (fallback.indexOf("//") === 0) fallback = "https:" + fallback;
+        embeds.push({ url: fallback, name: "HDFilmizle", lang: null });
+    }
+    return embeds;
+}
+
+function extractDirectUrl(embedHtml) {
+    var decRegex = /\(\s*function\s*\(d\s*,\s*k\s*\)\s*\{\s*var\s+o\s*=\s*['"]\s*['"]\s*,[\s\S]*?\}\s*\)\s*\(\s*(\[[0-9,\s\-]+\])\s*,\s*['"](\w+)['"]\s*\)/g;
+    var m;
+    while ((m = decRegex.exec(embedHtml)) !== null) {
+        try {
+            var decoded = decodeSources(JSON.parse(m[1]), m[2]);
+            if (decoded && decoded.indexOf("http") === 0) return decoded;
+        } catch(e) {}
+    }
+    var eeMatches = embedHtml.match(/EE\.dd\(["']([A-Za-z0-9+/=_-]+)["']\)/g);
+    if (eeMatches) {
+        for (var ei = 0; ei < eeMatches.length; ei++) {
+            var inner = eeMatches[ei].match(/EE\.dd\(["']([A-Za-z0-9+/=_-]+)["']\)/);
+            if (!inner) continue;
+            var eeDecoded = decodeEEdd(inner[1]);
+            if (eeDecoded && eeDecoded.indexOf("http") === 0) return eeDecoded;
+        }
+    }
+    return null;
+}
+
+function extractSubtitles(embedHtml) {
+    var subs = [];
+    var trackM = embedHtml.match(/configs\.tracks\s*=\s*(\[[\s\S]*?\]);/);
+    if (!trackM) return subs;
+    try {
+        var tracks = JSON.parse(trackM[1]);
+        for (var ti = 0; ti < tracks.length; ti++) {
+            var t = tracks[ti];
+            var fileUrl = t.file || null;
+            if (!fileUrl && t.fx && t.fx.d && t.fx.k) fileUrl = decodeSources(t.fx.d, t.fx.k);
+            if (fileUrl && fileUrl.indexOf("http") === 0) {
+                subs.push({ url: fileUrl, language: t.srclang || t.language || "en", name: t.label || "Altyazi" });
+            }
+        }
+    } catch(e) {}
+    return subs;
+}
+
+function describePlaylist(url, headers) {
+    var empty = { quality: null, resolution: null, audioTracks: [] };
+    return fetch(url, { headers: headers })
+        .then(function(r) { return r.ok ? r.text() : ""; })
+        .then(function(text) {
+            if (!text || text.indexOf("#EXT-X-STREAM-INF") === -1) return empty;
+            var baseDir = url.substring(0, url.lastIndexOf("/"));
+            var lines = text.split("\n");
+            var audioTracks = [];
+            var bestWidth = 0;
+            var bestHeight = 0;
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (line.indexOf("#EXT-X-STREAM-INF") === 0) {
+                    var resM = line.match(/RESOLUTION=(\d+)x(\d+)/);
+                    if (resM) {
+                        var w = parseInt(resM[1], 10);
+                        var h = parseInt(resM[2], 10);
+                        if (w > bestWidth) { bestWidth = w; bestHeight = h; }
+                    }
+                } else if (line.indexOf("#EXT-X-MEDIA:TYPE=AUDIO") === 0) {
+                    var uriM = line.match(/URI="([^"]+)"/);
+                    if (!uriM) continue;
+                    var nameM = line.match(/NAME="([^"]+)"/);
+                    var langM = line.match(/LANGUAGE="([^"]+)"/);
+                    audioTracks.push({
+                        url: absolutize(uriM[1], baseDir),
+                        language: langM ? langM[1] : "",
+                        name: nameM ? nameM[1] : (langM ? langM[1] : "Ses"),
+                        headers: headers
+                    });
+                }
+            }
+            return {
+                quality: qualityLabel(bestWidth, bestHeight),
+                resolution: bestWidth > 0 ? (bestWidth + "x" + bestHeight) : null,
+                audioTracks: audioTracks
+            };
+        })
+        .catch(function() { return empty; });
+}
+
+function buildStreamsForEmbed(embed) {
+    var embedOrigin = extractOrigin(embed.url);
+    var fetchHeaders = { "User-Agent": USER_AGENT, "Referer": embed.url, "Origin": embedOrigin };
+    console.log("[HD][DECODE] part=" + embed.name + " lang=" + embed.lang + " embed=" + embed.url);
+
+    return fetch(embed.url, { headers: fetchHeaders })
+        .then(function(r) { return r.text(); })
+        .then(function(embedHtml) {
+            var directUrl = extractDirectUrl(embedHtml);
+            if (!directUrl) { console.log("[HD][DECODE] no pattern matched for part=" + embed.name); return []; }
+            console.log("[HD][DIRECT] " + embed.name + " -> " + directUrl);
+
+            var subs = extractSubtitles(embedHtml);
+            var streamHeaders = { "Referer": embed.url, "Origin": embedOrigin, "User-Agent": USER_AGENT };
+
+            return describePlaylist(directUrl, streamHeaders).then(function(info) {
+                var langLabel = embed.lang ? (LANG_LABELS[embed.lang] || embed.lang) : null;
+                var titleParts = [];
+                if (info.quality) titleParts.push(info.quality);
+                if (info.resolution) titleParts.push(info.resolution);
+                if (langLabel) titleParts.push(langLabel);
+                if (info.audioTracks.length > 0) {
+                    titleParts.push(info.audioTracks.map(function(a) { return a.name; }).join(" / "));
+                }
+
+                var sourceLabel = langLabel || embed.name;
+                var stream = {
+                    name: "HDFilmizle" + (sourceLabel ? " · " + sourceLabel : ""),
+                    title: titleParts.join(" · ") || "HDFilmizle",
+                    url: directUrl,
+                    quality: info.quality || "unknown",
+                    type: "hls",
+                    headers: streamHeaders
+                };
+                if (embed.lang) stream.language = embed.lang;
+                if (subs.length > 0) stream.subtitles = subs;
+                if (info.audioTracks.length > 0) stream.audioTracks = info.audioTracks;
+                return [stream];
+            });
+        })
+        .catch(function(e) {
+            console.log("[HD][DECODE] part failed " + embed.name + ": " + (e.message || e));
+            return [];
+        });
+}
+
 function getStreams(tmdbId, mediaType, season, episode) {
     console.log("[HD][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + episode);
 
@@ -263,130 +448,25 @@ function getStreams(tmdbId, mediaType, season, episode) {
             return fetch(pageUrl, { headers: { "User-Agent": USER_AGENT } })
                 .then(function(r) { return r.text(); })
                 .then(function(html) {
-                    console.log("[HD][WATCH] html length=" + html.length + " truncated=" + (html.indexOf("...[truncated]") !== -1));
-                    var embedUrl = null;
+                    console.log("[HD][WATCH] html length=" + html.length);
+                    var embeds = resolveEmbeds(html);
+                    console.log("[HD][EMBED] parts=" + embeds.length + " -> " + embeds.map(function(e) { return e.name + "/" + e.lang; }).join(", "));
+                    if (embeds.length === 0) return [];
 
-                    // Method 1: parts array
-                    var partsMatch = html.match(/let\s+parts\s*=\s*(\[[\s\S]*?\]);/);
-                    if (partsMatch) {
-                        try {
-                            var parts = JSON.parse(partsMatch[1]);
-                            if (parts && parts.length > 0 && parts[0].data) {
-                                var sm = parts[0].data.match(/src=\\?"([\s\S]*?)\\?"/);
-                                if (sm) embedUrl = sm[1].replace(/\\\//g, "/");
-                            }
-                        } catch(e) {}
-                    }
-
-                    // Method 2: iframe.vpx
-                    if (!embedUrl) {
-                        var $ = cheerio.load(html);
-                        var iframe = $("iframe.vpx");
-                        if (iframe.length) embedUrl = iframe.attr("data-src") || iframe.attr("src");
-                    }
-
-                    // Method 3: any player iframe — FIX: guard instead of return false
-                    if (!embedUrl) {
-                        var $2 = cheerio.load(html);
-                        $2("iframe").each(function(idx, elem) {
-                            if (embedUrl) return; // guard
-                            var src = $2(elem).attr("src") || $2(elem).attr("data-src") || "";
-                            if (src.indexOf("vidrame") !== -1 || src.indexOf("vidmoxy") !== -1 || src.indexOf("/vr/") !== -1) {
-                                embedUrl = src;
-                            }
+                    var chain = Promise.resolve([]);
+                    embeds.forEach(function(embed) {
+                        chain = chain.then(function(acc) {
+                            return buildStreamsForEmbed(embed).then(function(list) { return acc.concat(list); });
                         });
-                    }
-
-                    if (!embedUrl) { console.log("[HD][EMBED] not found"); return null; }
-                    if (embedUrl.indexOf("//") === 0) embedUrl = "https:" + embedUrl;
-                    console.log("[HD][EMBED] url=" + embedUrl);
-                    return embedUrl;
+                    });
+                    return chain;
                 });
         })
-        .then(function(embedUrl) {
-            if (!embedUrl) return [];
-            if (Array.isArray(embedUrl)) return embedUrl;
-            console.log("[HD][DECODE] fetching embed: " + embedUrl);
-
-            var embedOrigin = extractOrigin(embedUrl);
-            var fetchHeaders = {
-                "User-Agent": USER_AGENT,
-                "Referer": embedUrl,
-                "Origin": embedOrigin
-            };
-
-            return fetch(embedUrl, { headers: fetchHeaders })
-                .then(function(r) { return r.text(); })
-                .then(function(embedHtml) {
-                    console.log("[HD][DECODE] embed length=" + embedHtml.length);
-                    // Method 1: Vidrame XOR cipher
-                    var decRegex = /\(\s*function\s*\(d\s*,\s*k\s*\)\s*\{\s*var\s+o\s*=\s*['"]\s*['"]\s*,[\s\S]*?\}\s*\)\s*\(\s*(\[[0-9,\s\-]+\])\s*,\s*['"](\w+)['"]\s*\)/g;
-                    var directUrl = null;
-                    var m;
-                    while ((m = decRegex.exec(embedHtml)) !== null) {
-                        try {
-                            var decoded = decodeSources(JSON.parse(m[1]), m[2]);
-                            if (decoded && decoded.indexOf("http") === 0) { directUrl = decoded; break; }
-                        } catch(e) {}
-                    }
-
-                    // Method 2: Vidmoxy EE.dd (Base64 + ROT13 + Reverse)
-                    if (!directUrl) {
-                        var eeMatches = embedHtml.match(/EE\.dd\(["']([A-Za-z0-9+/=_-]+)["']\)/g);
-                        if (eeMatches) {
-                            for (var ei = 0; ei < eeMatches.length; ei++) {
-                                var eeInner = eeMatches[ei].match(/EE\.dd\(["']([A-Za-z0-9+/=_-]+)["']\)/);
-                                if (eeInner) {
-                                    var eeDecoded = decodeEEdd(eeInner[1]);
-                                    if (eeDecoded && eeDecoded.indexOf("http") === 0) {
-                                        directUrl = eeDecoded;
-                                        console.log("[HD][DECODE] EE.dd decoded: " + directUrl);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (!directUrl) { console.log("[HD][DECODE] failed — no pattern matched"); return []; }
-                    console.log("[HD][DIRECT] url=" + directUrl);
-
-                    // Subtitles
-                    var subs = [];
-                    var trackM = embedHtml.match(/configs\.tracks\s*=\s*(\[[\s\S]*?\]);/);
-                    if (trackM) {
-                        try {
-                            var tracks = JSON.parse(trackM[1]);
-                            for (var ti = 0; ti < tracks.length; ti++) {
-                                var t = tracks[ti];
-                                var fileUrl = t.file || null;
-                                if (!fileUrl && t.fx && t.fx.d && t.fx.k) fileUrl = decodeSources(t.fx.d, t.fx.k);
-                                if (fileUrl && fileUrl.indexOf("http") === 0) {
-                                    subs.push({
-                                        url: fileUrl,
-                                        language: t.srclang || t.language || "en",
-                                        name: t.label || "Altyazi"
-                                    });
-                                }
-                            }
-                        } catch(e) {}
-                    }
-
-                    var streamHeaders = { "Referer": embedUrl, "Origin": embedOrigin, "User-Agent": USER_AGENT };
-
-                    var stream = {
-                        name: "HDFilmizle",
-                        title: "1080p",
-                        url: directUrl,
-                        quality: "1080p",
-                        type: "hls",
-                        headers: streamHeaders
-                    };
-                    if (subs.length > 0) stream.subtitles = subs;
-
-                    console.log("[HD][RETURN] success, url=" + directUrl);
-                    return [stream];
-                });
+        .then(function(streams) {
+            var list = streams || [];
+            console.log("[HD][RETURN] streams=" + list.length +
+                " audioTrackTotal=" + list.reduce(function(n, s) { return n + ((s.audioTracks || []).length); }, 0));
+            return list;
         })
         .catch(function(err) {
             console.error("[HD][ERROR] " + (err.message || err));
