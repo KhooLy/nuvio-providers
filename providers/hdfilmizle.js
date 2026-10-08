@@ -2,21 +2,34 @@ var cheerio;
 try { cheerio = require("cheerio-without-node-native"); } catch(e) { cheerio = require("cheerio"); }
 
 var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
-var BASE_URL = "https://www.hdfilmizle.vip";
+var BASE_URL = "https://www.hdfilmizle.live";
+var DOMAIN_CANDIDATES = [
+    "https://www.hdfilmizle.live",
+    "https://www.hdfilmizle.vip",
+    "https://www.hdfilmizle.so"
+];
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
-// Domain cache — sadece bir kez çözümlenir
 var domainResolved = false;
+
+function originOf(url) {
+    var m = String(url || "").match(/^(https?:\/\/[^\/]+)/);
+    return m ? m[1] : "";
+}
+
 function ensureBaseUrl() {
     if (domainResolved) return Promise.resolve();
-    return fetch("https://www.hdfilmizle.vip", { method: "GET", redirect: "follow" })
+    domainResolved = true;
+    // The site redirects old domains to the current one; read the Location
+    // header because the fetch bridge does not expose the final URL.
+    return fetch("https://www.hdfilmizle.vip", { method: "GET", redirect: "manual" })
         .then(function(resp) {
-            var m = (resp.url || "").match(/^(https?:\/\/[^\/]+)/);
-            if (m) BASE_URL = m[1];
-            domainResolved = true;
+            var loc = (resp && resp.headers && resp.headers.get) ? resp.headers.get("location") : "";
+            var found = originOf(loc);
+            if (found) BASE_URL = found;
             console.log("[HD][INIT] BASE_URL=" + BASE_URL);
         })
-        .catch(function() { domainResolved = true; });
+        .catch(function() { console.log("[HD][INIT] BASE_URL=" + BASE_URL); });
 }
 
 function fetchTmdbJson(url) {
@@ -99,36 +112,44 @@ function searchContent(title) {
         return Promise.resolve([]);
     }
     var encoded = "query=" + encodeURIComponent(title);
-    return fetch(BASE_URL + "/search/", {
-        method: "POST",
-        headers: {
-            "User-Agent": USER_AGENT,
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Referer": BASE_URL + "/"
-        },
-        body: encoded
-    })
-    .then(function(response) {
-        console.log("[HD][SEARCH] status=" + response.status + " title=" + title);
-        return response.text().then(function(text) {
-            console.log("[HD][SEARCH] body=" + text.substring(0, 200));
-            try {
-                var parsed = JSON.parse(text);
-                if (Array.isArray(parsed)) return parsed;
-                if (parsed && Array.isArray(parsed.results)) return parsed.results;
-                if (parsed && Array.isArray(parsed.data)) return parsed.data;
-                return [];
-            } catch(e) {
-                console.log("[HD][SEARCH] not JSON: " + e.message);
-                return [];
-            }
+    var bases = [BASE_URL].concat(DOMAIN_CANDIDATES.filter(function(b) { return b !== BASE_URL; }));
+
+    function attempt(index) {
+        if (index >= bases.length) return Promise.resolve([]);
+        var base = bases[index];
+        return fetch(base + "/search/", {
+            method: "POST",
+            headers: {
+                "User-Agent": USER_AGENT,
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer": base + "/"
+            },
+            body: encoded
+        })
+        .then(function(response) {
+            console.log("[HD][SEARCH] status=" + response.status + " base=" + base + " title=" + title);
+            return response.text().then(function(text) {
+                var parsed = null;
+                try { parsed = JSON.parse(text); } catch(e) { parsed = null; }
+                var results = null;
+                if (Array.isArray(parsed)) results = parsed;
+                else if (parsed && Array.isArray(parsed.results)) results = parsed.results;
+                else if (parsed && Array.isArray(parsed.data)) results = parsed.data;
+                if (response.ok && results) {
+                    BASE_URL = base;
+                    return results;
+                }
+                return attempt(index + 1);
+            });
+        })
+        .catch(function(e) {
+            console.log("[HD][SEARCH] failed: " + e.message);
+            return attempt(index + 1);
         });
-    })
-    .catch(function(e) {
-        console.log("[HD][SEARCH] failed: " + e.message);
-        return [];
-    });
+    }
+
+    return attempt(0);
 }
 
 // Vidrame decoder: XOR cipher with integer array + key
