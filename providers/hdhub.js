@@ -135,7 +135,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
                     if (!seen[m[1]]) { seen[m[1]] = true; links.push(m[1]); }
                 }
                 console.log("[HDH][ITEMS] " + links.length);
-                return Promise.all(links.slice(0, 6).map(resolveItem)).then(function(lists) {
+                return Promise.all(links.slice(0, 16).map(function(link, index) {
+                    return resolveItem(link).then(function(list) {
+                        if (list.length) console.log("[HDH][ITEM" + index + "] " + list.length);
+                        return list;
+                    });
+                })).then(function(lists) {
                     var all = [];
                     var uniq = {};
                     lists.forEach(function(list) {
@@ -143,7 +148,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
                     });
                     console.log("[HDH][CANDIDATES] " + all.length);
                     if (!all.length) return [];
-                    return Promise.all(all.slice(0, 14).map(probe)).then(function(results) {
+                    return Promise.all(all.slice(0, 40).map(probe)).then(function(results) {
                         var streams = [];
                         results.forEach(function(r) {
                             if (r.ok && r.type.indexOf("text/html") === -1) {
