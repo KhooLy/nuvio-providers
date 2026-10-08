@@ -95,17 +95,29 @@ function candidatesFrom(html) {
 
 function resolveItem(greenmotorsUrl) {
     return get(greenmotorsUrl).then(function(html) {
+        var hasO = /["']o["']\s*,\s*["']([^"']+)["']/.test(html);
+        console.log("[HDH][G] len=" + String(html || "").length + " o=" + hasO);
         var hub = decodeGreenmotors(html);
-        if (!hub) return [];
+        if (!hub) {
+            console.log("[HDH][G] decode=null");
+            return [];
+        }
+        console.log("[HDH][G] hub=" + hub.slice(0, 50));
         return get(hub, { "User-Agent": USER_AGENT, "Referer": greenmotorsUrl }).then(function(hubHtml) {
             var gm = /href="(https?:\/\/[^"]*hubcloud\.php\?[^"]+)"/.exec(hubHtml);
+            console.log("[HDH][H] len=" + String(hubHtml || "").length + " gx=" + (gm ? "yes" : "no"));
             if (!gm) return [];
             var gx = gm[1].replace(/&amp;/g, "&");
             return get(gx, { "User-Agent": USER_AGENT, "Referer": hub }).then(function(gxHtml) {
-                return candidatesFrom(gxHtml);
+                var c = candidatesFrom(gxHtml);
+                console.log("[HDH][X] len=" + String(gxHtml || "").length + " cands=" + c.length);
+                return c;
             });
         });
-    }).catch(function() { return []; });
+    }).catch(function(e) {
+        console.log("[HDH][G] err=" + (e && e.message ? e.message : e));
+        return [];
+    });
 }
 
 function probe(url) {
