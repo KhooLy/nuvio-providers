@@ -78,7 +78,7 @@ function resolveAnilistId(tmdbId, mediaType) {
     var idStr = String(tmdbId || "").trim();
     console.log("[HI][ANILIST] resolving id=" + idStr + " type=" + mediaType);
 
-    var TMDB_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "";
+    var TMDB_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
     
     // If no TMDB Key or tmdbId is purely numeric, try querying AniList directly or using title lookup
     var isImdb = /^tt\d+$/i.test(idStr);

@@ -1,7 +1,7 @@
 var cheerio;
 try { cheerio = require("cheerio-without-node-native"); } catch(e) { cheerio = require("cheerio"); }
 
-var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "YOUR_TMDB_API_KEY";
+var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
 var BASE_URL = "https://www.hdfilmizle.vip";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
