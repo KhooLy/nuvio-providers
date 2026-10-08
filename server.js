@@ -4,11 +4,18 @@ const path = require('path');
 
 const PORT = 3000;
 
-const server = http.createServer((req, res) => {
-    // Log the incoming request
-    console.log(`[Server Log] ${req.method} request to: ${req.url}`);
+const ROUTES = {
+    '/':                       { file: 'manifest.json',           type: 'application/json' },
+    '/manifest.json':          { file: 'manifest.json',           type: 'application/json' },
+    '/providers/hdfilmizle.js':{ file: 'providers/hdfilmizle.js', type: 'application/javascript' },
+    '/providers/hianime.js':   { file: 'providers/hianime.js',    type: 'application/javascript' },
+    '/providers/vidlove.js':   { file: 'providers/vidlove.js',    type: 'application/javascript' },
+    '/providers/hdhub.js':     { file: 'providers/hdhub.js',      type: 'application/javascript' },
+};
 
-    // Enable CORS so Nuvio app can query this local server
+const server = http.createServer((req, res) => {
+    console.log(`[Server] ${req.method} ${req.url}`);
+
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', '*');
@@ -19,29 +26,26 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    let filePath = '';
-    let contentType = 'text/plain';
-
-    if (req.url === '/' || req.url === '/manifest.json') {
-        filePath = path.join(__dirname, 'manifest.json');
-        contentType = 'application/json';
-    } else if (req.url === '/providers/hdfilmizle.js') {
-        filePath = path.join(__dirname, 'providers', 'hdfilmizle.js');
-        contentType = 'application/javascript';
+    const route = ROUTES[req.url];
+    if (route) {
+        const filePath = path.join(__dirname, route.file);
+        if (fs.existsSync(filePath)) {
+            res.writeHead(200, { 'Content-Type': route.type });
+            fs.createReadStream(filePath).pipe(res);
+            return;
+        }
     }
 
-    if (filePath && fs.existsSync(filePath)) {
-        res.writeHead(200, { 'Content-Type': contentType });
-        fs.createReadStream(filePath).pipe(res);
-    } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found');
-    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n=== NUVIO LOCAL DEV SERVER RUNNING ===`);
-    console.log(`Serving manifest at: http://localhost:${PORT}/manifest.json`);
-    console.log(`Serving provider at: http://localhost:${PORT}/providers/hdfilmizle.js`);
-    console.log(`======================================\n`);
+    console.log(`\n=== NUVIO LOCAL DEV SERVER ===`);
+    console.log(`Manifest:  http://localhost:${PORT}/manifest.json`);
+    console.log(`HDFilmizle:http://localhost:${PORT}/providers/hdfilmizle.js`);
+    console.log(`Hianime:   http://localhost:${PORT}/providers/hianime.js`);
+    console.log(`Vidlove:   http://localhost:${PORT}/providers/vidlove.js`);
+    console.log(`HDHub:     http://localhost:${PORT}/providers/hdhub.js`);
+    console.log(`==============================\n`);
 });

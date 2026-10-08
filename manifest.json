@@ -1,5 +1,5 @@
 {
-  "name": "HDFilmizle Nuvio Provider",
+  "name": "Nuvio Providers",
   "version": "1.0.0",
   "scrapers": [
     {
@@ -23,6 +23,74 @@
       "contentLanguage": [
         "tr",
         "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "hianime",
+      "name": "Hianime",
+      "description": "Anime streams (SUB + DUB) with subtitles in 9 languages from hianime.ms via VidNest API",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/hianime.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "vidlove",
+      "name": "Vidlove",
+      "description": "HLS streams (1080p/720p/480p) with subtitles for movies and series",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/vidlove.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "hdhub",
+      "name": "HDHub",
+      "description": "Direct MKV links from 4khdhub",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/hdhub.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi"
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
