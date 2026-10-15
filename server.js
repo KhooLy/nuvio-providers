@@ -11,6 +11,8 @@ const ROUTES = {
     '/providers/hianime.js':   { file: 'providers/hianime.js',    type: 'application/javascript' },
     '/providers/vidlove.js':   { file: 'providers/vidlove.js',    type: 'application/javascript' },
     '/providers/hdhub.js':     { file: 'providers/hdhub.js',      type: 'application/javascript' },
+    '/providers/cizgimax.js':  { file: 'providers/cizgimax.js',   type: 'application/javascript' },
+    '/providers/cizgivedizi.js':{ file: 'providers/cizgivedizi.js', type: 'application/javascript' },
 };
 
 const server = http.createServer((req, res) => {
@@ -47,5 +49,7 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`Hianime:   http://localhost:${PORT}/providers/hianime.js`);
     console.log(`Vidlove:   http://localhost:${PORT}/providers/vidlove.js`);
     console.log(`HDHub:     http://localhost:${PORT}/providers/hdhub.js`);
+    console.log(`CizgiMax:  http://localhost:${PORT}/providers/cizgimax.js`);
+    console.log(`CizgiVeDizi:http://localhost:${PORT}/providers/cizgivedizi.js`);
     console.log(`==============================\n`);
 });
