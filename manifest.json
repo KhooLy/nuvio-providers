@@ -116,27 +116,6 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
-    },
-    {
-      "id": "cizgivedizi",
-      "name": "CizgiVeDizi",
-      "description": "Turkish cartoons and series from cizgivedizi.net (needs a player that follows redirects with cookies)",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "tv"
-      ],
-      "filename": "providers/cizgivedizi.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "mp4"
-      ],
-      "contentLanguage": [
-        "tr"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
     }
   ]
 }

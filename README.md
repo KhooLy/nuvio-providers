@@ -11,7 +11,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for **HDFilmizle** and 
 | **Vidlove** | `vidlove` | Movies & Series | HLS | `vidlove.cc` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
-| **CizgiVeDizi** | `cizgivedizi` | Turkish Cartoons & Series | TR | `cizgivedizi.net` |
 
 ---
 
@@ -57,9 +56,6 @@ node -e 'require("./providers/hianime.js").getStreams("154587", "tv", 1, 1).then
 
 # Test CizgiMax
 node -e 'require("./providers/cizgimax.js").getStreams("37854", "tv", 1, 1).then(console.log)'
-
-# Test CizgiVeDizi
-node -e 'require("./providers/cizgivedizi.js").getStreams("387", "tv", 1, 1).then(console.log)'
 ```
 
 ---
