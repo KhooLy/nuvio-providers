@@ -1,4 +1,6 @@
 var BASE = "https://cizgivedizi.net";
+var SITEMAP_BASE = "https://www.cizgivedizi.net";
+var SITEMAPS = ["/sitemap-diziler.xml", "/sitemap-filmler.xml"];
 var VIDEO_ORIGIN = "https://video.cizgivedizi.net";
 var ADDON_NAME = "CizgiVeDizi";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -62,17 +64,19 @@ function tmdbMeta(tmdbId, mediaType) {
 
 function loadIndex() {
     if (indexCache && (Date.now() - indexCacheAt) < INDEX_TTL) return Promise.resolve(indexCache);
-    return fetchText(BASE + "/").then(function (html) {
-        var m = /const ITEM_META\s*=\s*(\{[\s\S]*?\});/.exec(html);
-        if (!m) return indexCache || [];
-        var meta;
-        try { meta = JSON.parse(m[1]); } catch (e) { return indexCache || []; }
+    return Promise.all(SITEMAPS.map(function (p) { return fetchText(SITEMAP_BASE + p); })).then(function (docs) {
         var list = [];
-        for (var id in meta) {
-            var v = meta[id];
-            if (!v || !v.href) continue;
-            list.push({ id: id, name: v.name || "", href: v.href });
+        for (var d = 0; d < docs.length; d++) {
+            var re = /<loc>([^<]+)<\/loc>/g;
+            var m;
+            while ((m = re.exec(docs[d])) !== null) {
+                var path = m[1].replace(/^https?:\/\/[^/]+/, "");
+                var pm = /^\/(dizi|film)\/([^/]+)\/([^/?#]+)$/.exec(path);
+                if (!pm) continue;
+                list.push({ id: pm[2], name: pm[3], href: path });
+            }
         }
+        if (!list.length) return indexCache || [];
         indexCache = list;
         indexCacheAt = Date.now();
         return list;
