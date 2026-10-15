@@ -1,6 +1,6 @@
 # Nuvio Providers
 
-Multi-provider package for **Nuvio**, featuring scrapers for **HDFilmizle** and **Hianime**.
+Multi-provider package for **Nuvio**, featuring scrapers for movie, series and anime sources.
 
 ## 📦 Included Providers
 
@@ -11,6 +11,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for **HDFilmizle** and 
 | **Vidlove** | `vidlove` | Movies & Series | HLS | `vidlove.cc` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
+| **SezonlukDizi** | `sezonlukdizi` | Turkish Series | TR Dublaj/Altyazı HLS | `sezonlukdizi.cc` |
 
 ---
 
@@ -36,7 +37,8 @@ The server will be available at:
 ├── server.js                # CORS-enabled local HTTP server
 ├── providers/
 │   ├── hdfilmizle.js        # HDFilmizle provider (movies & tv series)
-│   └── hianime.js           # Hianime provider (anime SUB + DUB)
+│   ├── hianime.js           # Hianime provider (anime SUB + DUB)
+│   └── sezonlukdizi.js      # SezonlukDizi provider (Turkish series, dub/sub)
 ├── hianime_scraper.py       # Standalone Python CLI scraper & downloader
 └── README.md
 ```
@@ -56,6 +58,9 @@ node -e 'require("./providers/hianime.js").getStreams("154587", "tv", 1, 1).then
 
 # Test CizgiMax
 node -e 'require("./providers/cizgimax.js").getStreams("37854", "tv", 1, 1).then(console.log)'
+
+# Test SezonlukDizi
+node -e 'require("./providers/sezonlukdizi.js").getStreams("2085", "tv", 1, 1).then(console.log)'
 ```
 
 ---
