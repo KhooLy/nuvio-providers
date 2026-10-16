@@ -6,12 +6,20 @@ var HEADERS = {
     "Origin":     "https://player.vidlove.cc"
 };
 
-var COMBOS = [
-    ["vidapi", ""],
-    ["moviebox2", "1"],
-    ["vidapi", "1"],
-    ["moviebox2", ""]
+var SOURCES = [
+    { key: "moviebox2", label: "MovieBox 2" },
+    { key: "moviebox",  label: "MovieBox" },
+    { key: "dcloud",    label: "DCloud" },
+    { key: "tcloud",    label: "TCloud" },
+    { key: "vidapi",    label: "VidAPI" }
 ];
+
+function buildUrl(base, src) {
+    var url = base + "&sources=" + src.key;
+    if (src.key === "moviebox" || src.key === "moviebox2") url += "&vh=1&hevc=1";
+    if (src.key === "dcloud") url += "&sw=1";
+    return url;
+}
 
 function fetchJson(url) {
     return fetch(url, { headers: HEADERS })
@@ -73,7 +81,7 @@ function audioFromCodecs(codecs) {
     return null;
 }
 
-function describe(source, list, src) {
+function describe(src, list) {
     var sorted = list.slice().sort(function(a, b) { return a.width - b.width; });
     var labels = [];
     for (var i = 0; i < sorted.length; i++) {
@@ -90,7 +98,7 @@ function describe(source, list, src) {
         audio = audioFromCodecs(list[k].codecs);
         if (audio) break;
     }
-    var parts = [source.label || source.source || src];
+    var parts = [src.label];
     if (labels.length) parts.push(labels.join(" / "));
     if (audio) parts.push(audio);
     return { quality: quality, bestUri: best ? best.uri : null, detail: parts.join(" · ") };
@@ -114,23 +122,22 @@ function getStreams(tmdbId, mediaType, season, episode) {
     var base = isTv
         ? ENDPOINT + "/tv?id=" + tmdbId + "&season=" + season + "&episode=" + episode + "&mode=json"
         : ENDPOINT + "/movie?id=" + tmdbId + "&mode=json";
+    var subsEndpoint = isTv
+        ? ENDPOINT + "/subtitles/tv/" + tmdbId + "/" + season + "/" + episode
+        : ENDPOINT + "/subtitles/movie/" + tmdbId;
 
-    function attempt(i) {
-        if (i >= COMBOS.length) return Promise.resolve([]);
-        var src = COMBOS[i][0];
-        var hevc = COMBOS[i][1];
-        var url = base + "&sources=" + src + (hevc ? "&hevc=" + hevc : "");
-        return fetchJson(url).then(function(payload) {
+    var tasks = SOURCES.map(function(src) {
+        return fetchJson(buildUrl(base, src)).then(function(payload) {
             var source = payload && payload.source;
-            if (!source) return attempt(i + 1);
+            if (!source) return null;
 
             var list = source.manifest ? variants(source.manifest) : [];
-            var info = describe(source, list, src);
+            var info = describe(src, list);
             var playUrl = source.url || info.bestUri;
-            if (!playUrl) return attempt(i + 1);
+            if (!playUrl) return null;
 
-            console.log("[VID][OK] source=" + src + " quality=" + info.quality + " detail=" + info.detail);
-            return [{
+            console.log("[VID][OK] source=" + src.key + " quality=" + info.quality + " detail=" + info.detail);
+            return {
                 name: "Vidlove",
                 title: info.detail,
                 url: playUrl,
@@ -139,11 +146,52 @@ function getStreams(tmdbId, mediaType, season, episode) {
                 type: "hls",
                 headers: HEADERS,
                 subtitles: toSubtitles(payload && payload.subtitles)
-            }];
+            };
         });
-    }
+    });
 
-    return attempt(0).catch(function(err) {
+    tasks.push(fetchJson(subsEndpoint).then(function(list) {
+        if (!Array.isArray(list)) return [];
+        return list.filter(function(s) { return s && s.file; }).map(function(s) {
+            return { url: s.file, language: s.lang || s.srclang || "en", name: s.label || "Subtitle" };
+        });
+    }));
+
+    return Promise.all(tasks).then(function(results) {
+        var streams = [];
+        var allSubs = [];
+        var seenSub = {};
+
+        for (var i = 0; i < results.length; i++) {
+            var item = results[i];
+            if (!item) continue;
+            if (Array.isArray(item)) {
+                for (var a = 0; a < item.length; a++) {
+                    if (!seenSub[item[a].url]) { seenSub[item[a].url] = true; allSubs.push(item[a]); }
+                }
+            } else {
+                streams.push(item);
+            }
+        }
+
+        streams.sort(function(a, b) {
+            var order = {};
+            for (var s = 0; s < SOURCES.length; s++) order[SOURCES[s].label] = s;
+            return (order[a.title.split(" · ")[0]] || 99) - (order[b.title.split(" · ")[0]] || 99);
+        });
+
+        for (var v = 0; v < streams.length; v++) {
+            var merged = allSubs.slice();
+            var own = streams[v].subtitles || [];
+            for (var w = 0; w < own.length; w++) {
+                if (!seenSub[own[w].url]) { seenSub[own[w].url] = true; merged.push(own[w]); }
+            }
+            streams[v].subtitles = merged;
+        }
+
+        console.log("[VID][RETURN] streams=" + streams.length + " subs=" + allSubs.length);
+        return streams;
+    }).catch(function(err) {
         console.error("[VID][ERROR] " + (err.message || err));
         return [];
     });
