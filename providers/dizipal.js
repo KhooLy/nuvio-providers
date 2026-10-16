@@ -1,5 +1,6 @@
 var DEFAULT_BASE = "https://dizipal1590.com";
 var SHORTCUT = "https://t.ly/dizipalgiris";
+var APP_URL_TXT = "https://api.kromozpulse.com/url.txt";
 var ADDON_NAME = "DiziPal";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
@@ -271,10 +272,14 @@ function shortcutRedirect() {
         .catch(function () { return ""; });
 }
 
-function resolveBase() {
-    if (typeof __DIZIPAL_BASE__ !== "undefined" && __DIZIPAL_BASE__) {
-        return probe(__DIZIPAL_BASE__).then(function (b) { return b || __DIZIPAL_BASE__; });
-    }
+function appDomainResolve() {
+    return fetchText(APP_URL_TXT, { "User-Agent": "okhttp/4.9.2", "Accept": "text/plain,text/html,*/*" }).then(function (txt) {
+        var m = /https?:\/\/([a-z0-9.-]+)/i.exec(String(txt || "").trim());
+        return m ? "https://" + m[1] : null;
+    }).catch(function () { return null; });
+}
+
+function shortcutResolve() {
     return shortcutRedirect().then(function (finalUrl) {
         var cleaned = finalUrl.replace(/\+/g, " ");
         var m = /dizipal[^0-9]{0,4}(\d{2,6})/i.exec(cleaned);
@@ -295,6 +300,18 @@ function resolveBase() {
             return probe(host).then(function (ok) { return ok || next(); });
         }
         return next();
+    }).catch(function () { return null; });
+}
+
+function resolveBase() {
+    if (typeof __DIZIPAL_BASE__ !== "undefined" && __DIZIPAL_BASE__) {
+        return probe(__DIZIPAL_BASE__).then(function (b) { return b || __DIZIPAL_BASE__; });
+    }
+    return appDomainResolve().then(function (host) {
+        if (!host) return null;
+        return probe(host).then(function (ok) { return ok || null; });
+    }).then(function (base) {
+        return base || shortcutResolve();
     }).then(function (base) {
         return base || DEFAULT_BASE;
     }).catch(function () { return DEFAULT_BASE; });
