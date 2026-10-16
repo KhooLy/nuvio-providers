@@ -210,8 +210,32 @@ getStreamRetried(1).then(lowestVariant).then(function (r) {
         .sort((a, b) => (tierOf[a] - tierOf[b]) || (a - b))
         .map(idx => () => job(idx));
 
-    if (process.env.LITE === "1") {
-        pool(urls.map((u, i) => () => keyJob(i)), W).then(function () { return pubChain; }).then(function () {
+    if (process.env.LITE === "1" || process.env.CLIENT === "1") {
+        var strides = process.env.CLIENT === "1" ? (process.env.PHASES || "6,3,1").split(",").map(Number) : [1];
+        var doneIdx = {};
+        var chain = Promise.resolve();
+        strides.forEach(function (stride, si) {
+            chain = chain.then(function () {
+                var ids = [];
+                for (var i = si === strides.length - 1 ? 0 : stride - 1; i < urls.length; i += stride) {
+                    if (!doneIdx[i]) ids.push(i);
+                }
+                if (si < strides.length - 1) ids.forEach(function (i) { doneIdx[i] = true; });
+                var frames = [];
+                return pool(ids.map(idx => () => keyJob(idx).then(function () {
+                    var f = path.join(frmDirK, "k_" + String(idx).padStart(5, "0") + ".jpg");
+                    if (fs.existsSync(f)) frames.push({ t: starts[idx], file: f });
+                })), W).then(function () {
+                    frames.sort((a, b) => a.t - b.t);
+                    if (si < strides.length - 1) {
+                        return tile(frames, "coarse_s" + stride).then(function () {
+                            console.log("[MILESTONE] ~" + Math.round(DUR / frames.length) + "s grid sheet hazir @ " + elapsed() + " sn (" + frames.length + " kare)");
+                        });
+                    }
+                });
+            });
+        });
+        chain.then(function () {
             var frames = [];
             fs.readdirSync(frmDirK).forEach(function (f) {
                 var idx2 = parseInt(f.slice(2), 10);
