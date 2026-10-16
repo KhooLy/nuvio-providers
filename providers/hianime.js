@@ -1,27 +1,16 @@
-/**
- * Hianime.ms Nuvio Provider
- *
- * Anime streaming provider for Nuvio. Works by:
- *  1. Resolving AniList ID from TMDB/IMDB/AniList ID
- *  2. Querying new.vidnest.fun API for encrypted SUB and DUB streams
- *  3. Decrypting the custom Base64 payload (scrambled alphabet key)
- *  4. Returning HLS stream with CDN headers + subtitles
- */
+var ANILIST_API   = "https://graphql.anilist.co";
+var MEGAPLAY_BASE = "https://megaplay.buzz";
 
-var ANILIST_API  = "https://graphql.anilist.co";
-var VIDNEST_BASE = "https://new.vidnest.fun/hianime/anime";
-var VIDNEST_SECRET = "F9k2mR8vL4qP7wY1zN0fG3bS6tH5jC8d_x4R7vN2mP9qL1";
-
-var CDN_HEADERS = {
+var MEGAPLAY_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
     "Referer":    "https://megaplay.buzz/",
     "Origin":     "https://megaplay.buzz"
 };
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+var ENC_KEY = "i?LMTAx0Q6,:}50U";
+var ENC_IV  = "W0;27ToaUpl_P%'c";
 
-function fetchJson(url, options) {
-    url = signVidnest(url);
+function fetchText(url, options) {
     return fetch(url, options || {})
         .then(function(r) {
             return r.text().then(function(body) {
@@ -29,30 +18,23 @@ function fetchJson(url, options) {
                     console.log("[HI][HTTP] " + r.status + " " + url);
                     return null;
                 }
-                try { return JSON.parse(body); } catch(e) { return null; }
+                return body;
             });
         })
         .catch(function(e) {
-            console.log("[HI][FETCH] error: " + (e.message || e) + " url=" + url);
+            console.log("[HI][FETCH] " + (e.message || e) + " url=" + url);
             return null;
         });
 }
 
-var B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
-function b64UrlEncode(bytes) {
-    var out = "";
-    for (var i = 0; i < bytes.length; i += 3) {
-        var b0 = bytes[i];
-        var b1 = i + 1 < bytes.length ? bytes[i + 1] : null;
-        var b2 = i + 2 < bytes.length ? bytes[i + 2] : null;
-        out += B64_CHARS[b0 >> 2];
-        out += B64_CHARS[((b0 & 3) << 4) | (b1 === null ? 0 : b1 >> 4)];
-        if (b1 !== null) out += B64_CHARS[((b1 & 15) << 2) | (b2 === null ? 0 : b2 >> 6)];
-        if (b2 !== null) out += B64_CHARS[b2 & 63];
-    }
-    return out;
+function fetchJson(url, options) {
+    return fetchText(url, options).then(function(body) {
+        if (!body) return null;
+        try { return JSON.parse(body); } catch (e) { return null; }
+    });
 }
+
+var B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 function b64UrlDecode(str) {
     var map = {};
@@ -69,147 +51,6 @@ function b64UrlDecode(str) {
         if (c3 !== null) bytes.push(((c2 & 3) << 6) | c3);
     }
     return new Uint8Array(bytes);
-}
-
-function randomNonce() {
-    var bytes = new Uint8Array(16);
-    var c = (typeof crypto !== "undefined" && crypto) ? crypto : null;
-    if (c && typeof c.getRandomValues === "function") c.getRandomValues(bytes);
-    else for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-    return b64UrlEncode(bytes);
-}
-
-function signVidnest(url) {
-    var u = String(url || "");
-    if (u.indexOf(VIDNEST_BASE) !== 0) return url;
-    return u + (u.indexOf("?") === -1 ? "?" : "&") + "_n=" + randomNonce();
-}
-
-var AES_SBOX = new Uint8Array(256);
-(function () {
-    var p = 1;
-    var q = 1;
-    do {
-        p = (p ^ (p << 1) ^ (p & 0x80 ? 0x1b : 0)) & 255;
-        q ^= q << 1; q ^= q << 2; q ^= q << 4; q &= 255;
-        if (q & 0x80) q ^= 0x09;
-        var x = q ^ ((q << 1) | (q >> 7)) ^ ((q << 2) | (q >> 6)) ^ ((q << 3) | (q >> 5)) ^ ((q << 4) | (q >> 4));
-        AES_SBOX[p] = (x ^ 0x63) & 255;
-    } while (p !== 1);
-    AES_SBOX[0] = 0x63;
-})();
-
-function aesX2(x) { return (x << 1) ^ (x & 0x80 ? 0x1b : 0); }
-
-function aesExpandKey(key) {
-    var Nk = key.length / 4;
-    var Nr = Nk + 6;
-    var words = 4 * (Nr + 1);
-    var w = new Uint8Array(words * 4);
-    w.set(key);
-    var rcon = 1;
-    for (var i = Nk; i < words; i++) {
-        var t0 = w[(i - 1) * 4];
-        var t1 = w[(i - 1) * 4 + 1];
-        var t2 = w[(i - 1) * 4 + 2];
-        var t3 = w[(i - 1) * 4 + 3];
-        if (i % Nk === 0) {
-            var tmp = t0;
-            t0 = AES_SBOX[t1] ^ rcon;
-            t1 = AES_SBOX[t2];
-            t2 = AES_SBOX[t3];
-            t3 = AES_SBOX[tmp];
-            rcon = aesX2(rcon);
-        } else if (Nk > 6 && i % Nk === 4) {
-            t0 = AES_SBOX[t0]; t1 = AES_SBOX[t1]; t2 = AES_SBOX[t2]; t3 = AES_SBOX[t3];
-        }
-        w[i * 4] = w[(i - Nk) * 4] ^ t0;
-        w[i * 4 + 1] = w[(i - Nk) * 4 + 1] ^ t1;
-        w[i * 4 + 2] = w[(i - Nk) * 4 + 2] ^ t2;
-        w[i * 4 + 3] = w[(i - Nk) * 4 + 3] ^ t3;
-    }
-    return { w: w, Nr: Nr };
-}
-
-function aesEncryptBlock(expanded, block) {
-    var w = expanded.w;
-    var Nr = expanded.Nr;
-    var st = new Uint8Array(16);
-    for (var i = 0; i < 16; i++) st[i] = block[i] ^ w[i];
-    for (var round = 1; round <= Nr; round++) {
-        var t = new Uint8Array(16);
-        for (var s = 0; s < 16; s++) t[s] = AES_SBOX[st[s]];
-        var r = new Uint8Array(16);
-        r[0] = t[0]; r[1] = t[5]; r[2] = t[10]; r[3] = t[15];
-        r[4] = t[4]; r[5] = t[9]; r[6] = t[14]; r[7] = t[3];
-        r[8] = t[8]; r[9] = t[13]; r[10] = t[2]; r[11] = t[7];
-        r[12] = t[12]; r[13] = t[1]; r[14] = t[6]; r[15] = t[11];
-        if (round !== Nr) {
-            for (var c = 0; c < 4; c++) {
-                var a0 = r[c * 4], a1 = r[c * 4 + 1], a2 = r[c * 4 + 2], a3 = r[c * 4 + 3];
-                r[c * 4] = aesX2(a0) ^ (aesX2(a1) ^ a1) ^ a2 ^ a3;
-                r[c * 4 + 1] = a0 ^ aesX2(a1) ^ (aesX2(a2) ^ a2) ^ a3;
-                r[c * 4 + 2] = a0 ^ a1 ^ aesX2(a2) ^ (aesX2(a3) ^ a3);
-                r[c * 4 + 3] = (aesX2(a0) ^ a0) ^ a1 ^ a2 ^ aesX2(a3);
-            }
-        }
-        var base = round * 16;
-        for (var k = 0; k < 16; k++) st[k] = r[k] ^ w[base + k];
-    }
-    return st;
-}
-
-var SHA_K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
-
-function sha256(bytes) {
-    var l = bytes.length;
-    var bitLen = l * 8;
-    var withOne = l + 1;
-    var total = withOne + ((56 - withOne % 64) + 64) % 64 + 8;
-    var msg = new Uint8Array(total);
-    msg.set(bytes);
-    msg[l] = 0x80;
-    var hi = Math.floor(bitLen / 0x100000000);
-    var lo = bitLen >>> 0;
-    msg[total - 8] = (hi >>> 24) & 255; msg[total - 7] = (hi >>> 16) & 255;
-    msg[total - 6] = (hi >>> 8) & 255;  msg[total - 5] = hi & 255;
-    msg[total - 4] = (lo >>> 24) & 255; msg[total - 3] = (lo >>> 16) & 255;
-    msg[total - 2] = (lo >>> 8) & 255;  msg[total - 1] = lo & 255;
-    var h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
-    var h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
-    var w = new Int32Array(64);
-    function rr(x, n) { return (x >>> n) | (x << (32 - n)); }
-    for (var off = 0; off < total; off += 64) {
-        for (var i = 0; i < 16; i++) {
-            w[i] = (msg[off + i * 4] << 24) | (msg[off + i * 4 + 1] << 16) | (msg[off + i * 4 + 2] << 8) | msg[off + i * 4 + 3];
-        }
-        for (var j = 16; j < 64; j++) {
-            var s0 = rr(w[j - 15], 7) ^ rr(w[j - 15], 18) ^ (w[j - 15] >>> 3);
-            var s1 = rr(w[j - 2], 17) ^ rr(w[j - 2], 19) ^ (w[j - 2] >>> 10);
-            w[j] = (w[j - 16] + s0 + w[j - 7] + s1) | 0;
-        }
-        var a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
-        for (var m = 0; m < 64; m++) {
-            var S1 = rr(e, 6) ^ rr(e, 11) ^ rr(e, 25);
-            var ch = (e & f) ^ (~e & g);
-            var t1 = (h + S1 + ch + SHA_K[m] + w[m]) | 0;
-            var S0 = rr(a, 2) ^ rr(a, 13) ^ rr(a, 22);
-            var maj = (a & b) ^ (a & c) ^ (b & c);
-            var t2 = (S0 + maj) | 0;
-            h = g; g = f; f = e; e = (d + t1) | 0;
-            d = c; c = b; b = a; a = (t1 + t2) | 0;
-        }
-        h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
-        h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
-    }
-    var out = new Uint8Array(32);
-    var vals = [h0, h1, h2, h3, h4, h5, h6, h7];
-    for (var n2 = 0; n2 < 8; n2++) {
-        var v = vals[n2];
-        out[n2 * 4] = (v >>> 24) & 255; out[n2 * 4 + 1] = (v >>> 16) & 255;
-        out[n2 * 4 + 2] = (v >>> 8) & 255;  out[n2 * 4 + 3] = v & 255;
-    }
-    return out;
 }
 
 function utf8Encode(str) {
@@ -244,43 +85,135 @@ function utf8Decode(bytes) {
     return out;
 }
 
-function aesGcmDecrypt(key, iv, ciphertext) {
+function padBytes(str, len) {
+    var src = utf8Encode(str);
+    var out = new Uint8Array(len);
+    out.set(src.subarray(0, Math.min(len, src.length)));
+    return out;
+}
+
+var AES_SBOX = new Uint8Array(256);
+(function () {
+    var p = 1, q = 1;
+    do {
+        p = (p ^ (p << 1) ^ (p & 0x80 ? 0x1b : 0)) & 255;
+        q ^= q << 1; q ^= q << 2; q ^= q << 4; q &= 255;
+        if (q & 0x80) q ^= 0x09;
+        var x = q ^ ((q << 1) | (q >> 7)) ^ ((q << 2) | (q >> 6)) ^ ((q << 3) | (q >> 5)) ^ ((q << 4) | (q >> 4));
+        AES_SBOX[p] = (x ^ 0x63) & 255;
+    } while (p !== 1);
+    AES_SBOX[0] = 0x63;
+})();
+
+var AES_INV_SBOX = new Uint8Array(256);
+for (var inv = 0; inv < 256; inv++) AES_INV_SBOX[AES_SBOX[inv]] = inv;
+
+function aesExpandKey(key) {
+    var Nk = key.length / 4;
+    var Nr = Nk + 6;
+    var words = 4 * (Nr + 1);
+    var w = new Uint8Array(words * 4);
+    w.set(key);
+    var rcon = 1;
+    for (var i = Nk; i < words; i++) {
+        var t0 = w[(i - 1) * 4];
+        var t1 = w[(i - 1) * 4 + 1];
+        var t2 = w[(i - 1) * 4 + 2];
+        var t3 = w[(i - 1) * 4 + 3];
+        if (i % Nk === 0) {
+            var tmp = t0;
+            t0 = AES_SBOX[t1] ^ rcon;
+            t1 = AES_SBOX[t2];
+            t2 = AES_SBOX[t3];
+            t3 = AES_SBOX[tmp];
+            rcon = ((rcon << 1) ^ (rcon & 0x80 ? 0x1b : 0)) & 255;
+        } else if (Nk > 6 && i % Nk === 4) {
+            t0 = AES_SBOX[t0]; t1 = AES_SBOX[t1]; t2 = AES_SBOX[t2]; t3 = AES_SBOX[t3];
+        }
+        w[i * 4]     = w[(i - Nk) * 4]     ^ t0;
+        w[i * 4 + 1] = w[(i - Nk) * 4 + 1] ^ t1;
+        w[i * 4 + 2] = w[(i - Nk) * 4 + 2] ^ t2;
+        w[i * 4 + 3] = w[(i - Nk) * 4 + 3] ^ t3;
+    }
+    return { w: w, Nr: Nr };
+}
+
+function gmul(a, b) {
+    var p = 0;
+    a &= 255;
+    for (var i = 0; i < 8; i++) {
+        if (b & 1) p ^= a;
+        var hi = a & 0x80;
+        a = (a << 1) & 255;
+        if (hi) a ^= 0x1b;
+        b >>= 1;
+    }
+    return p;
+}
+
+function aesDecryptBlock(expanded, block) {
+    var w = expanded.w;
+    var Nr = expanded.Nr;
+    var st = new Uint8Array(16);
+    var base = Nr * 16;
+    for (var i = 0; i < 16; i++) st[i] = block[i] ^ w[base + i];
+
+    for (var round = Nr - 1; round >= 0; round--) {
+        var t = new Uint8Array(16);
+        t[0] = st[0];   t[1] = st[13]; t[2] = st[10];  t[3] = st[7];
+        t[4] = st[4];   t[5] = st[1];  t[6] = st[14];  t[7] = st[11];
+        t[8] = st[8];   t[9] = st[5];  t[10] = st[2];  t[11] = st[15];
+        t[12] = st[12]; t[13] = st[9]; t[14] = st[6];  t[15] = st[3];
+
+        for (var s = 0; s < 16; s++) t[s] = AES_INV_SBOX[t[s]];
+
+        base = round * 16;
+        for (var k = 0; k < 16; k++) t[k] ^= w[base + k];
+
+        if (round !== 0) {
+            for (var c = 0; c < 4; c++) {
+                var a0 = t[c * 4], a1 = t[c * 4 + 1], a2 = t[c * 4 + 2], a3 = t[c * 4 + 3];
+                t[c * 4]     = gmul(a0, 14) ^ gmul(a1, 11) ^ gmul(a2, 13) ^ gmul(a3, 9);
+                t[c * 4 + 1] = gmul(a0, 9)  ^ gmul(a1, 14) ^ gmul(a2, 11) ^ gmul(a3, 13);
+                t[c * 4 + 2] = gmul(a0, 13) ^ gmul(a1, 9)  ^ gmul(a2, 14) ^ gmul(a3, 11);
+                t[c * 4 + 3] = gmul(a0, 11) ^ gmul(a1, 13) ^ gmul(a2, 9)  ^ gmul(a3, 14);
+            }
+        }
+        st = t;
+    }
+    return st;
+}
+
+function aesCbcDecrypt(key, iv, data) {
     var expanded = aesExpandKey(key);
-    var counter = new Uint8Array(16);
-    counter.set(iv, 0);
-    counter[15] = 2;
-    var out = new Uint8Array(ciphertext.length);
-    for (var off = 0; off < ciphertext.length; off += 16) {
-        var ks = aesEncryptBlock(expanded, counter);
-        var n = Math.min(16, ciphertext.length - off);
-        for (var i = 0; i < n; i++) out[off + i] = ciphertext[off + i] ^ ks[i];
-        for (var b = 15; b >= 0; b--) { if (++counter[b] & 255) break; }
+    var out = new Uint8Array(data.length);
+    var prev = iv;
+    for (var off = 0; off < data.length; off += 16) {
+        var blk = data.subarray(off, off + 16);
+        var dec = aesDecryptBlock(expanded, blk);
+        for (var i = 0; i < 16; i++) out[off + i] = dec[i] ^ prev[i];
+        prev = blk;
     }
     return out;
 }
 
-function decryptVidnestV2(payload) {
-    var raw = b64UrlDecode(payload.d);
-    var iv = raw.slice(0, 12);
-    var body = raw.slice(12, raw.length - 16);
-    var key = sha256(utf8Encode(payload.n + "|" + VIDNEST_SECRET));
-    return JSON.parse(utf8Decode(aesGcmDecrypt(key, iv, body)));
+function decryptPayload(enc) {
+    var key = padBytes(ENC_KEY, 32);
+    var iv  = padBytes(ENC_IV, 16);
+    var raw = aesCbcDecrypt(key, iv, b64UrlDecode(enc));
+    var pad = raw[raw.length - 1];
+    var end = (pad >= 1 && pad <= 16) ? raw.length - pad : raw.length;
+    return JSON.parse(utf8Decode(raw.subarray(0, end)));
 }
-
-// ─── AniList Lookup ────────────────────────────────────────────────────────────
 
 function resolveAnilistId(tmdbId, mediaType) {
     var idStr = String(tmdbId || "").trim();
     console.log("[HI][ANILIST] resolving id=" + idStr + " type=" + mediaType);
 
     var TMDB_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
-    
-    // If no TMDB Key or tmdbId is purely numeric, try querying AniList directly or using title lookup
     var isImdb = /^tt\d+$/i.test(idStr);
-    
+
     if (!TMDB_KEY && !isImdb && /^\d+$/.test(idStr)) {
-        // Fallback: treat numeric id directly as AniList ID
-        console.log("[HI][ANILIST] using numeric id directly as AniList ID: " + idStr);
         return Promise.resolve({ anilistId: idStr, title: "Anime" });
     }
 
@@ -294,175 +227,156 @@ function resolveAnilistId(tmdbId, mediaType) {
                        "?api_key=" + TMDB_KEY;
     }
 
-    return fetchJson(tmdbFetchUrl)
-        .then(function(tmdb) {
-            var title, year;
-            if (tmdb) {
-                if (isImdb) {
-                    var arr = tmdb.tv_results || tmdb.movie_results || [];
-                    if (arr.length > 0) {
-                        title = arr[0].name || arr[0].title || "";
-                        year  = (arr[0].first_air_date || arr[0].release_date || "").split("-")[0];
-                    }
-                } else {
-                    title = tmdb.name || tmdb.title || tmdb.original_name || tmdb.original_title || "";
-                    year  = (tmdb.first_air_date || tmdb.release_date || "").split("-")[0];
+    return fetchJson(tmdbFetchUrl).then(function (tmdb) {
+        var title, year;
+        if (tmdb) {
+            if (isImdb) {
+                var arr = tmdb.tv_results || tmdb.movie_results || [];
+                if (arr.length > 0) {
+                    title = arr[0].name || arr[0].title || "";
+                    year  = (arr[0].first_air_date || arr[0].release_date || "").split("-")[0];
                 }
+            } else {
+                title = tmdb.name || tmdb.title || tmdb.original_name || tmdb.original_title || "";
+                year  = (tmdb.first_air_date || tmdb.release_date || "").split("-")[0];
             }
+        }
 
-            if (!title) {
-                // Fallback: if TMDB failed or no key, assume idStr might be AniList ID directly
-                console.log("[HI][ANILIST] TMDB lookup empty, fallback to idStr directly: " + idStr);
-                return { anilistId: idStr, title: "Anime" };
-            }
+        if (!title) {
+            return { anilistId: idStr, title: "Anime" };
+        }
 
-            console.log("[HI][ANILIST] TMDB title=" + title + " year=" + year);
+        var gql = {
+            query: "query($search:String){Page(page:1,perPage:5){media(search:$search,type:ANIME,sort:[POPULARITY_DESC]){id format title{english romaji}startDate{year}}}}",
+            variables: { search: title }
+        };
 
-            // Search AniList by title, sorted by popularity descending to get main TV series
-            var gql = {
-                query: "query($search:String){Page(page:1,perPage:5){media(search:$search,type:ANIME,sort:[POPULARITY_DESC]){id format title{english romaji}startDate{year}}}}",
-                variables: { search: title }
-            };
-
-            return fetch(ANILIST_API, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                body: JSON.stringify(gql)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var mediaList = data && data.data && data.data.Page && data.data.Page.media;
-                if (!mediaList || !mediaList.length) {
-                    console.log("[HI][ANILIST] no result for: " + title);
-                    return { anilistId: idStr, title: title };
-                }
-
-                // Pick the best match
-                var best = mediaList[0];
-                if (year) {
-                    for (var mi = 0; mi < mediaList.length; mi++) {
-                        var item = mediaList[mi];
-                        if (item.startDate && item.startDate.year && String(item.startDate.year) === String(year)) {
-                            best = item;
-                            break;
-                        }
-                    }
-                }
-
-                var foundTitle = (best.title && (best.title.english || best.title.romaji)) || title;
-                console.log("[HI][ANILIST] matched AniList id=" + best.id + " title=" + foundTitle);
-                return { anilistId: best.id, title: foundTitle };
-            })
-            .catch(function(e) {
-                console.log("[HI][ANILIST] GraphQL error: " + (e.message || e));
+        return fetch(ANILIST_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify(gql)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            var mediaList = data && data.data && data.data.Page && data.data.Page.media;
+            if (!mediaList || !mediaList.length) {
                 return { anilistId: idStr, title: title };
-            });
+            }
+
+            var best = mediaList[0];
+            if (year) {
+                for (var mi = 0; mi < mediaList.length; mi++) {
+                    var item = mediaList[mi];
+                    if (item.startDate && item.startDate.year && String(item.startDate.year) === String(year)) {
+                        best = item;
+                        break;
+                    }
+                }
+            }
+
+            var foundTitle = (best.title && (best.title.english || best.title.romaji)) || title;
+            console.log("[HI][ANILIST] matched AniList id=" + best.id + " title=" + foundTitle);
+            return { anilistId: best.id, title: foundTitle };
+        })
+        .catch(function (e) {
+            console.log("[HI][ANILIST] GraphQL error: " + (e.message || e));
+            return { anilistId: idStr, title: title };
         });
-}
-
-// ─── Stream Data Fetcher ───────────────────────────────────────────────────────
-
-function fetchStreamData(anilistId, episodeNum, version) {
-    var apiUrl = VIDNEST_BASE + "/" + anilistId + "/" + episodeNum + "/" + version;
-    console.log("[HI][STREAM] fetching: " + apiUrl);
-
-    return fetchJson(apiUrl, {
-        headers: {
-            "User-Agent": CDN_HEADERS["User-Agent"],
-            "Accept": "application/json"
-        }
-    })
-    .then(function(data) {
-        if (!data) return null;
-        if (data.v !== 2 || !data.d || !data.n) {
-            console.log("[HI][STREAM] invalid format");
-            return null;
-        }
-
-        var decrypted;
-        try { decrypted = decryptVidnestV2(data); }
-        catch(e) { console.log("[HI][DECRYPT] " + (e.message || e)); return null; }
-        if (!decrypted) return null;
-
-        console.log("[HI][STREAM] decrypted " + version.toUpperCase() + " stream ok!");
-        return decrypted;
     });
 }
 
-// ─── Main getStreams ───────────────────────────────────────────────────────────
+function fetchMediaId(anilistId, episodeNum, version) {
+    var url = MEGAPLAY_BASE + "/stream/ani/" + anilistId + "/" + episodeNum + "/" + version;
+    return fetchText(url, { headers: MEGAPLAY_HEADERS }).then(function (html) {
+        if (!html) return null;
+        var m = /data-id="(\d+)"/.exec(html);
+        return m ? m[1] : null;
+    });
+}
+
+function fetchSources(mediaId, version) {
+    var url = MEGAPLAY_BASE + "/stream/getSourcesNew?id=" + mediaId + "&type=" + version;
+    return fetchJson(url, { headers: MEGAPLAY_HEADERS }).then(function (data) {
+        if (!data) return null;
+
+        var payload = data.sources || null;
+        if (!payload && data.enc) {
+            try { payload = decryptPayload(data.enc); }
+            catch (e) { console.log("[HI][DECRYPT] " + (e.message || e)); return null; }
+        }
+        if (!payload) return null;
+
+        var file = payload.file || (payload.sources && payload.sources[0] && payload.sources[0].file);
+        if (!file) return null;
+
+        return { file: file, tracks: data.tracks || [], intro: data.intro, outro: data.outro };
+    });
+}
+
+function buildStream(anilistId, episodeNum, version, showTitle) {
+    return fetchMediaId(anilistId, episodeNum, version).then(function (mediaId) {
+        if (!mediaId) {
+            console.log("[HI][PAGE] no media id for " + version);
+            return null;
+        }
+        return fetchSources(mediaId, version).then(function (data) {
+            if (!data) return null;
+
+            var subs = [];
+            for (var i = 0; i < data.tracks.length; i++) {
+                var t = data.tracks[i];
+                if (t.file && t.kind === "captions") {
+                    subs.push({
+                        url:      t.file,
+                        language: langCodeFromLabel(t.label),
+                        name:     t.label || "Subtitle"
+                    });
+                }
+            }
+
+            var stream = {
+                name:    "Hianime",
+                title:   "1080p · " + version.toUpperCase() + (showTitle ? " · " + showTitle : ""),
+                url:     data.file,
+                quality: "1080p",
+                type:    "hls",
+                headers: MEGAPLAY_HEADERS
+            };
+
+            if (subs.length > 0) stream.subtitles = subs;
+            if (data.intro && data.intro.end > data.intro.start) stream.intro = data.intro;
+            if (data.outro && data.outro.end > data.outro.start) stream.outro = data.outro;
+
+            console.log("[HI][STREAM] " + version.toUpperCase() + " ok: " + data.file);
+            return stream;
+        });
+    });
+}
 
 function getStreams(tmdbId, mediaType, season, episode) {
     var epNum = episode || 1;
     console.log("[HI][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + epNum);
 
-    return resolveAnilistId(tmdbId, mediaType)
-        .then(function(resolved) {
-            if (!resolved || !resolved.anilistId) {
-                console.log("[HI][RESOLVE] failed to get AniList ID");
-                return [];
-            }
-
-            var anilistId = resolved.anilistId;
-            var showTitle = resolved.title;
-
-            return Promise.all([
-                fetchStreamData(anilistId, epNum, "sub"),
-                fetchStreamData(anilistId, epNum, "dub")
-            ])
-            .then(function(results) {
-                var streams = [];
-                var versions = ["sub", "dub"];
-
-                for (var vi = 0; vi < versions.length; vi++) {
-                    var ver = versions[vi];
-                    var decrypted = results[vi];
-                    if (!decrypted) continue;
-
-                    var sources = decrypted.sources || [];
-                    if (!sources.length) continue;
-
-                    var m3u8Url = sources[0].file || sources[0].url;
-                    if (!m3u8Url) continue;
-
-                    var subs = [];
-                    var tracks = decrypted.tracks || [];
-                    for (var ti = 0; ti < tracks.length; ti++) {
-                        var t = tracks[ti];
-                        if (t.file && t.kind === "captions") {
-                            subs.push({
-                                url:      t.file,
-                                language: langCodeFromLabel(t.label),
-                                name:     t.label || "Subtitle"
-                            });
-                        }
-                    }
-
-                    var stream = {
-                        name:    "Hianime",
-                        title:   "1080p · " + ver.toUpperCase() + (showTitle ? " · " + showTitle : ""),
-                        url:     m3u8Url,
-                        quality: "1080p",
-                        type:    "hls",
-                        headers: CDN_HEADERS
-                    };
-
-                    if (subs.length > 0)             stream.subtitles = subs;
-                    if (decrypted.intro)              stream.intro     = decrypted.intro;
-                    if (decrypted.outro)              stream.outro     = decrypted.outro;
-
-                    streams.push(stream);
-                }
-
-                return streams;
-            });
-        })
-        .catch(function(err) {
-            console.error("[HI][ERROR] " + (err.message || err));
+    return resolveAnilistId(tmdbId, mediaType).then(function (resolved) {
+        if (!resolved || !resolved.anilistId) {
+            console.log("[HI][RESOLVE] failed to get AniList ID");
             return [];
-        });
-}
+        }
 
-// ─── Utility ───────────────────────────────────────────────────────────────────
+        var anilistId = resolved.anilistId;
+        var showTitle = resolved.title;
+
+        return Promise.all([
+            buildStream(anilistId, epNum, "sub", showTitle),
+            buildStream(anilistId, epNum, "dub", showTitle)
+        ]).then(function (list) {
+            return list.filter(Boolean);
+        });
+    }).catch(function (err) {
+        console.error("[HI][ERROR] " + (err.message || err));
+        return [];
+    });
+}
 
 function langCodeFromLabel(label) {
     if (!label) return "en";
