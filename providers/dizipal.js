@@ -6,6 +6,10 @@ var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
 var PASSPHRASE = "3hPn4uCjTVtfYWcjIcoJQ4cL1WWk1qxXI39egLYOmNv6IblA7eKJz68uU3eLzux1biZLCms0quEjTYniGv5z1JcKbNIsDQFSeIZOBZJz4is6pD7UyWDggWWzTLBQbHcQFpBQdClnuQaMNUHtLHTpzCvZy33p6I7wFBvL4fnXBYH84aUIyWGTRvM2G5cfoNf4705tO2kv";
 var MAX_RESULTS = 10;
+var MAX_CANDIDATES = 5;
+var CANDIDATE_PARALLEL = 3;
+var CANDIDATE_STAGGER = 250;
+var TOKEN_TTL = 600000;
 
 var MASK64 = (1n << 64n) - 1n;
 var SHA512_K = [
@@ -265,7 +269,9 @@ function probe(base) {
         return r.text().then(function (html) {
             if (!html || html.indexOf("cKey") === -1) return null;
             var m = /^(https?:\/\/[^\/]+)/.exec(r.url || "");
-            return m ? m[1] : base;
+            var host = m ? m[1] : base;
+            cacheTokens(host, html);
+            return host;
         });
     }).catch(function () { return null; });
 }
@@ -354,25 +360,51 @@ function tmdbMeta(tmdbId, mediaType) {
     });
 }
 
-function searchSite(base, term) {
+var tokenCache = null;
+
+function cacheTokens(base, page) {
+    var km = /name="cKey" value="([^"]+)"/.exec(page);
+    if (!km) return;
+    var vm = /name="cValue"\s*value="([^"]*)"/.exec(page);
+    tokenCache = { base: base, key: km[1], value: vm ? vm[1] : "", at: Date.now() };
+}
+
+function searchTokens(base) {
+    if (tokenCache && tokenCache.base === base && (Date.now() - tokenCache.at) < TOKEN_TTL) {
+        return Promise.resolve(tokenCache);
+    }
     return fetchText(base + "/arama-yap", { "User-Agent": USER_AGENT }).then(function (page) {
-        var km = /name="cKey" value="([^"]+)"/.exec(page);
-        console.log("[DP][SEARCH] term=" + term + " len=" + page.length + " cKey=" + (km ? "yes" : "no"));
-        if (!km) return [];
-        var vm = /name="cValue"\s*value="([^"]*)"/.exec(page);
-        var body = "cKey=" + encodeURIComponent(km[1]) +
-            "&cValue=" + encodeURIComponent(vm ? vm[1] : "") +
-            "&type=hepsi&searchterm=" + encodeURIComponent(term);
-        return fetchJson(base + "/bg/searchcontent", {
-            "User-Agent": USER_AGENT,
-            "Referer": base + "/arama-yap",
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-        }, { method: "POST", body: body }).then(function (res) {
-            var list = res && res.data && res.data.result;
-            var arr = Array.isArray(list) ? list : [];
-            console.log("[DP][SEARCH] results=" + arr.length + " term=" + term);
-            return arr;
+        cacheTokens(base, page);
+        return (tokenCache && tokenCache.base === base) ? tokenCache : null;
+    });
+}
+
+function searchContent(base, tokens, term) {
+    var body = "cKey=" + encodeURIComponent(tokens.key) +
+        "&cValue=" + encodeURIComponent(tokens.value) +
+        "&type=hepsi&searchterm=" + encodeURIComponent(term);
+    return fetchJson(base + "/bg/searchcontent", {
+        "User-Agent": USER_AGENT,
+        "Referer": base + "/arama-yap",
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+    }, { method: "POST", body: body }).then(function (res) {
+        var list = res && res.data && res.data.result;
+        return Array.isArray(list) ? list : [];
+    });
+}
+
+function searchSite(base, term) {
+    return searchTokens(base).then(function (tokens) {
+        if (!tokens) return [];
+        return searchContent(base, tokens, term).then(function (arr) {
+            console.log("[DP][SEARCH] term=" + term + " results=" + arr.length);
+            if (arr.length || (Date.now() - tokens.at) < 30000) return arr;
+            tokenCache = null;
+            return searchTokens(base).then(function (fresh) {
+                if (!fresh || fresh.key === tokens.key) return arr;
+                return searchContent(base, fresh, term);
+            });
         });
     });
 }
@@ -549,33 +581,68 @@ function tryCandidate(base, meta, item) {
     });
 }
 
-function tryCandidates(base, meta, items, index) {
-    if (index >= items.length) return Promise.resolve([]);
-    return tryCandidate(base, meta, items[index]).then(function (streams) {
-        if (streams && streams.length) return streams;
-        return tryCandidates(base, meta, items, index + 1);
+function tryCandidates(base, meta, items) {
+    var queue = items.slice(0, MAX_CANDIDATES);
+    return new Promise(function (resolve) {
+        if (!queue.length) return resolve([]);
+        var next = 0, inflight = 0, settled = false, timer = null;
+
+        function settle(streams) {
+            if (settled) return;
+            settled = true;
+            if (timer) clearTimeout(timer);
+            resolve(streams);
+        }
+
+        function done() {
+            inflight--;
+            if (next >= queue.length && inflight === 0) settle([]);
+            else schedule();
+        }
+
+        function onResult(streams) {
+            if (streams && streams.length) settle(streams);
+            else done();
+        }
+
+        function tick() {
+            timer = null;
+            if (settled) return;
+            if (next < queue.length && inflight < CANDIDATE_PARALLEL) {
+                var item = queue[next++];
+                inflight++;
+                tryCandidate(base, meta, item).then(onResult).catch(done);
+            }
+            if (next < queue.length && inflight < CANDIDATE_PARALLEL) schedule();
+        }
+
+        function schedule() {
+            if (settled || timer) return;
+            timer = setTimeout(tick, CANDIDATE_STAGGER);
+        }
+
+        tick();
     });
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
     console.log("[DP][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + episode);
-    return resolvedBase().then(function (base) {
-        return tmdbMeta(tmdbId, mediaType).then(function (meta) {
-            if (!meta || !meta.title) { console.log("[DP][TMDB] no meta for id=" + tmdbId); return []; }
-            meta.season = season;
-            meta.episode = episode;
-            console.log("[DP][TMDB] id=" + tmdbId + " TR=" + meta.title + " EN=" + meta.original + " year=" + meta.year);
-            return searchSite(base, meta.title).then(function (results) {
-                if ((!results || !results.length) && meta.original) {
-                    return searchSite(base, meta.original).then(function (r2) { return r2 || []; });
-                }
-                return results || [];
-            }).then(function (results) {
-                var items = rankCandidates(results, meta);
-                console.log("[DP][MATCH] candidates=" + items.length);
-                if (!items.length) return [];
-                return tryCandidates(base, meta, items.slice(0, 5), 0);
-            });
+    return Promise.all([resolvedBase(), tmdbMeta(tmdbId, mediaType)]).then(function (r) {
+        var base = r[0], meta = r[1];
+        if (!meta || !meta.title) { console.log("[DP][TMDB] no meta for id=" + tmdbId); return []; }
+        meta.season = season;
+        meta.episode = episode;
+        console.log("[DP][TMDB] id=" + tmdbId + " TR=" + meta.title + " EN=" + meta.original + " year=" + meta.year);
+        return searchSite(base, meta.title).then(function (results) {
+            if ((!results || !results.length) && meta.original) {
+                return searchSite(base, meta.original).then(function (r2) { return r2 || []; });
+            }
+            return results || [];
+        }).then(function (results) {
+            var items = rankCandidates(results, meta);
+            console.log("[DP][MATCH] candidates=" + items.length);
+            if (!items.length) return [];
+            return tryCandidates(base, meta, items);
         });
     }).then(function (streams) {
         console.log("[DP][RETURN] streams=" + (streams ? streams.length : 0));
