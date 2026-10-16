@@ -261,9 +261,13 @@ function normalize(value) {
 }
 
 function probe(base) {
-    return fetchText(base + "/arama-yap", { "User-Agent": USER_AGENT }).then(function (html) {
-        return html && html.indexOf("cKey") !== -1 ? base : null;
-    });
+    return fetch(base + "/arama-yap", { headers: { "User-Agent": USER_AGENT }, redirect: "follow" }).then(function (r) {
+        return r.text().then(function (html) {
+            if (!html || html.indexOf("cKey") === -1) return null;
+            var m = /^(https?:\/\/[^\/]+)/.exec(r.url || "");
+            return m ? m[1] : base;
+        });
+    }).catch(function () { return null; });
 }
 
 function shortcutRedirect() {
