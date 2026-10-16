@@ -13,6 +13,7 @@ const ROUTES = {
     '/providers/hdhub.js':     { file: 'providers/hdhub.js',      type: 'application/javascript' },
     '/providers/cizgimax.js':  { file: 'providers/cizgimax.js',   type: 'application/javascript' },
     '/providers/sezonlukdizi.js': { file: 'providers/sezonlukdizi.js', type: 'application/javascript' },
+    '/providers/dizipal.js':   { file: 'providers/dizipal.js',    type: 'application/javascript' },
 };
 
 const server = http.createServer((req, res) => {
@@ -51,5 +52,6 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`HDHub:     http://localhost:${PORT}/providers/hdhub.js`);
     console.log(`CizgiMax:  http://localhost:${PORT}/providers/cizgimax.js`);
     console.log(`SezonlukDizi: http://localhost:${PORT}/providers/sezonlukdizi.js`);
+    console.log(`DiziPal:   http://localhost:${PORT}/providers/dizipal.js`);
     console.log(`==============================\n`);
 });
