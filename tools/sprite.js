@@ -102,8 +102,8 @@ function vtt(meta, dur, name) {
 }
 
 var workdir = fs.mkdtempSync(path.join(os.tmpdir(), "sprite-"));
-var segDir = path.join(workdir, "seg"), frmDir = path.join(workdir, "frm");
-fs.mkdirSync(segDir); fs.mkdirSync(frmDir);
+var segDir = path.join(workdir, "seg"), frmDir = path.join(workdir, "frm"), frmDirK = path.join(workdir, "frmk");
+fs.mkdirSync(segDir); fs.mkdirSync(frmDir); fs.mkdirSync(frmDirK);
 
 var t0 = Date.now();
 function elapsed() { return ((Date.now() - t0) / 1000).toFixed(1); }
@@ -156,7 +156,13 @@ getStreamRetried(1).then(lowestVariant).then(function (r) {
 
     function job(idx) {
         var seg = path.join(segDir, "s_" + String(idx + 1).padStart(5, "0") + ".bin");
-        return sh("curl", ["-s", "-H", "Referer: " + REFERER, "-o", seg, urls[idx], "--max-time", "120"]).then(function () {
+        var dl = function (n) {
+            return sh("curl", ["-s", "-H", "Referer: " + REFERER, "-o", seg, urls[idx], "--max-time", "120"]).then(function () {
+                var sz = fs.existsSync(seg) ? fs.statSync(seg).size : 0;
+                if (sz < 10240 && n < 3) return new Promise(r => setTimeout(r, 1500)).then(() => dl(n + 1));
+            });
+        };
+        return dl(0).then(function () {
             var lst = bySeg[idx].sort(function (a, b) { return a - b; });
             var lastLocal = lst[lst.length - 1] - starts[idx];
             var sel = lst.map(p => "eq(n," + Math.round((p - starts[idx]) * 23.976024) + ")").join("+");
@@ -191,9 +197,39 @@ getStreamRetried(1).then(lowestVariant).then(function (r) {
         });
     }
 
+    function keyJob(idx) {
+        var part = path.join(segDir, "k_" + String(idx + 1).padStart(5, "0") + ".bin");
+        return sh("curl", ["-s", "-r", "0-131071", "-H", "Referer: " + REFERER, "-o", part, urls[idx], "--max-time", "60"]).then(function () {
+            return sh("ffmpeg", ["-y", "-loglevel", "error", "-i", part,
+                "-vf", "select='eq(pict_type,I)',scale=160:90", "-frames:v", "1",
+                "-fps_mode", "passthrough", "-q:v", "5", path.join(frmDirK, "k_" + String(idx).padStart(5, "0") + ".jpg")]);
+        });
+    }
+
     var tasks = Object.keys(bySeg).map(k => +k)
         .sort((a, b) => (tierOf[a] - tierOf[b]) || (a - b))
         .map(idx => () => job(idx));
+
+    if (process.env.LITE === "1") {
+        pool(urls.map((u, i) => () => keyJob(i)), W).then(function () { return pubChain; }).then(function () {
+            var frames = [];
+            fs.readdirSync(frmDirK).forEach(function (f) {
+                var idx2 = parseInt(f.slice(2), 10);
+                if (!isNaN(idx2)) frames.push({ t: starts[idx2], file: path.join(frmDirK, f) });
+            });
+            frames.sort((a, b) => a.t - b.t);
+            return tile(frames, "sprite").then(function () {
+                vtt(frames, DUR, "preview");
+                var files = fs.readdirSync(outdir).filter(f => f.indexOf("sprite_") === 0 && f.endsWith(".jpg"));
+                var bytes = files.reduce((s, f) => s + fs.statSync(path.join(outdir, f)).size, 0);
+                console.log("[DONE] " + frames.length + " keyframe, " + files.length + " sheet, " +
+                    (bytes / 1048576).toFixed(2) + " MB + preview.vtt | TOPLAM " + elapsed() + " sn");
+                fs.rmSync(workdir, { recursive: true, force: true });
+            });
+        });
+        return;
+    }
+
     pool(tasks, W).then(function () {
         return pubChain;
     }).then(function () {
