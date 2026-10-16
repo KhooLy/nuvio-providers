@@ -199,7 +199,13 @@ getStreamRetried(1).then(lowestVariant).then(function (r) {
 
     function keyJob(idx) {
         var part = path.join(segDir, "k_" + String(idx + 1).padStart(5, "0") + ".bin");
-        return sh("curl", ["-s", "-r", "0-131071", "-H", "Referer: " + REFERER, "-o", part, urls[idx], "--max-time", "60"]).then(function () {
+        var dl = function (n) {
+            return sh("curl", ["-s", "-r", "0-131071", "-H", "Referer: " + REFERER, "-o", part, urls[idx], "--max-time", "60"]).then(function () {
+                var sz = fs.existsSync(part) ? fs.statSync(part).size : 0;
+                if (sz < 10240 && n < 3) return new Promise(r => setTimeout(r, 1500)).then(() => dl(n + 1));
+            });
+        };
+        return dl(0).then(function () {
             return sh("ffmpeg", ["-y", "-loglevel", "error", "-i", part,
                 "-vf", "select='eq(pict_type,I)',scale=160:90", "-frames:v", "1",
                 "-fps_mode", "passthrough", "-q:v", "5", path.join(frmDirK, "k_" + String(idx).padStart(5, "0") + ".jpg")]);
@@ -226,6 +232,11 @@ getStreamRetried(1).then(lowestVariant).then(function (r) {
                     var f = path.join(frmDirK, "k_" + String(idx).padStart(5, "0") + ".jpg");
                     if (fs.existsSync(f)) frames.push({ t: starts[idx], file: f });
                 })), W).then(function () {
+                    frames = [];
+                    fs.readdirSync(frmDirK).forEach(function (f) {
+                        var idx2 = parseInt(f.slice(2), 10);
+                        if (!isNaN(idx2) && doneIdx[idx2]) frames.push({ t: starts[idx2], file: path.join(frmDirK, f) });
+                    });
                     frames.sort((a, b) => a.t - b.t);
                     if (si < strides.length - 1) {
                         return tile(frames, "coarse_s" + stride).then(function () {
