@@ -323,6 +323,7 @@ function resolvedBase() {
     if (baseCache) return Promise.resolve(baseCache);
     return resolveBase().then(function (base) {
         baseCache = base;
+        console.log("[DP][INIT] BASE_URL=" + base);
         return base;
     });
 }
@@ -352,6 +353,7 @@ function tmdbMeta(tmdbId, mediaType) {
 function searchSite(base, term) {
     return fetchText(base + "/arama-yap", { "User-Agent": USER_AGENT }).then(function (page) {
         var km = /name="cKey" value="([^"]+)"/.exec(page);
+        console.log("[DP][SEARCH] term=" + term + " len=" + page.length + " cKey=" + (km ? "yes" : "no"));
         if (!km) return [];
         var vm = /name="cValue"\s*value="([^"]*)"/.exec(page);
         var body = "cKey=" + encodeURIComponent(km[1]) +
@@ -364,7 +366,9 @@ function searchSite(base, term) {
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
         }, { method: "POST", body: body }).then(function (res) {
             var list = res && res.data && res.data.result;
-            return Array.isArray(list) ? list : [];
+            var arr = Array.isArray(list) ? list : [];
+            console.log("[DP][SEARCH] results=" + arr.length + " term=" + term);
+            return arr;
         });
     });
 }
@@ -509,6 +513,7 @@ function resolveIframe(iframeUrl, base) {
                     });
                 }
             }
+            console.log("[DP][PLAYLIST] sources=" + out.length);
             return out;
         });
     });
@@ -526,10 +531,14 @@ function tryCandidate(base, meta, item) {
     return fetchText(pageUrl, { "User-Agent": USER_AGENT, "Referer": base + "/" }).then(function (pageHtml) {
         if (!pageHtml) return [];
         if (!meta.isTv) return pageHtml;
-        return episodePage(base, meta, pageHtml);
+        return episodePage(base, meta, pageHtml).then(function (h) {
+            console.log("[DP][EPISODE] url=" + pageUrl + " s=" + meta.season + " e=" + meta.episode + " found=" + (h ? "yes" : "no"));
+            return h;
+        });
     }).then(function (mediaHtml) {
         if (!mediaHtml) return [];
         return resolveIframeTarget(mediaHtml).then(function (iframeUrl) {
+            console.log("[DP][IFRAME] " + (iframeUrl || "none") + " from=" + pageUrl);
             if (!iframeUrl) return [];
             return resolveIframe(iframeUrl, base);
         });
@@ -545,11 +554,13 @@ function tryCandidates(base, meta, items, index) {
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
+    console.log("[DP][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + episode);
     return resolvedBase().then(function (base) {
         return tmdbMeta(tmdbId, mediaType).then(function (meta) {
-            if (!meta || !meta.title) return [];
+            if (!meta || !meta.title) { console.log("[DP][TMDB] no meta for id=" + tmdbId); return []; }
             meta.season = season;
             meta.episode = episode;
+            console.log("[DP][TMDB] id=" + tmdbId + " TR=" + meta.title + " EN=" + meta.original + " year=" + meta.year);
             return searchSite(base, meta.title).then(function (results) {
                 if ((!results || !results.length) && meta.original) {
                     return searchSite(base, meta.original).then(function (r2) { return r2 || []; });
@@ -557,10 +568,14 @@ function getStreams(tmdbId, mediaType, season, episode) {
                 return results || [];
             }).then(function (results) {
                 var items = rankCandidates(results, meta);
+                console.log("[DP][MATCH] candidates=" + items.length);
                 if (!items.length) return [];
                 return tryCandidates(base, meta, items.slice(0, 5), 0);
             });
         });
+    }).then(function (streams) {
+        console.log("[DP][RETURN] streams=" + (streams ? streams.length : 0));
+        return streams;
     }).catch(function (err) {
         console.error("[DiziPal][ERROR] " + (err && err.message ? err.message : err));
         return [];
