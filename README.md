@@ -38,8 +38,13 @@ The server will be available at:
 ├── providers/
 │   ├── hdfilmizle.js        # HDFilmizle provider (movies & tv series)
 │   ├── hianime.js           # Hianime provider (anime SUB + DUB)
+│   ├── vidlove.js           # Vidlove provider (all 5 upstream sources in parallel + merged subtitles)
+│   ├── hdhub.js             # HDHub provider (movies & tv, direct MKV)
+│   ├── cizgimax.js          # CizgiMax provider (Turkish cartoon/anime, TV only)
 │   └── sezonlukdizi.js      # SezonlukDizi provider (Turkish series, dub/sub)
-├── hianime_scraper.py       # Standalone Python CLI scraper & downloader
+├── tools/
+│   ├── thumbnail.js         # Retry-based single-frame grabber for vidlove streams
+│   └── sprite.js            # Progressive tiered sprite sheet + preview.vtt generator
 └── README.md
 ```
 
@@ -59,9 +64,23 @@ node -e 'require("./providers/hianime.js").getStreams("154587", "tv", 1, 1).then
 # Test CizgiMax
 node -e 'require("./providers/cizgimax.js").getStreams("37854", "tv", 1, 1).then(console.log)'
 
+# Test HDHub
+node -e 'require("./providers/hdhub.js").getStreams("27205", "movie").then(console.log)'
+
 # Test SezonlukDizi
 node -e 'require("./providers/sezonlukdizi.js").getStreams("2085", "tv", 1, 1).then(console.log)'
 ```
+
+> **Note:** Vidlove movie streams are currently dead upstream (all sources return null for the movie endpoint); TV works. The API also has intermittent null-windows, so `providers/vidlove.js` and `tools/*.js` retry periodically.
+
+### Sprite Sheets
+
+```bash
+# node tools/sprite.js <tmdbId> <movie|tv> [season] [episode] <outputDir> [finalIntervalSec]
+node tools/sprite.js 1396 tv 1 1 out/
+```
+
+Builds progressive sprite sheets from the lowest-quality vidlove stream: tier interval is picked from video duration (first sheet at ~100-130 frames), intermediate `coarse_t*.jpg` sheets are published as tiers complete, then final `sprite_XX.jpg` (default 5s interval) + `preview.vtt`.
 
 ---
 
