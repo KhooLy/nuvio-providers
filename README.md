@@ -13,6 +13,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
 | **SezonlukDizi** | `sezonlukdizi` | Turkish Series | TR Dublaj/Altyazı HLS | `sezonlukdizi.cc` |
 | **DiziPal** | `dizipal` | Movies & Series | TR Dublaj/Altyazı HLS | rotating (via `t.ly/dizipalgiris`) |
+| **DiziBOX** | `dizibox` | Turkish Series | TR Dublaj/Altyazı HLS | `dizibox.live` |
 
 ---
 
@@ -43,7 +44,8 @@ The server will be available at:
 │   ├── hdhub.js             # HDHub provider (movies & tv, direct MKV)
 │   ├── cizgimax.js          # CizgiMax provider (Turkish cartoon/anime, TV only)
 │   ├── sezonlukdizi.js      # SezonlukDizi provider (Turkish series, dub/sub)
-│   └── dizipal.js           # DiziPal provider (movies & series, dub/sub, rotating domain)
+│   ├── dizipal.js           # DiziPal provider (movies & series, dub/sub, rotating domain)
+│   └── dizibox.js           # DiziBOX provider (Turkish series, dub/sub)
 ├── tools/
 │   ├── thumbnail.js         # Retry-based single-frame grabber for vidlove streams
 │   └── sprite.js            # Progressive tiered sprite sheet + preview.vtt generator
@@ -74,6 +76,9 @@ node -e 'require("./providers/sezonlukdizi.js").getStreams("2085", "tv", 1, 1).t
 
 # Test DiziPal
 node -e 'require("./providers/dizipal.js").getStreams("27205", "movie").then(console.log)'
+
+# Test DiziBOX
+node -e 'require("./providers/dizibox.js").getStreams("196322", "tv", 2, 8).then(console.log)'
 ```
 
 > **Note:** Vidlove movie streams are currently dead upstream (all sources return null for the movie endpoint); TV works. The API also has intermittent null-windows, so `providers/vidlove.js` and `tools/*.js` retry periodically.
