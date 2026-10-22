@@ -206,8 +206,14 @@ function decryptPayload(enc) {
     return JSON.parse(utf8Decode(raw.subarray(0, end)));
 }
 
+function deaccent(value) {
+    return String(value || "").normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[ıİ]/g, "i").replace(/[ß]/g, "ss");
+}
+
 function normalizeTitle(value) {
-    return String(value || "").toLowerCase()
+    return deaccent(value).toLowerCase()
         .replace(/[^a-z0-9]+/g, " ").trim();
 }
 
@@ -259,7 +265,8 @@ function resolveAnilistId(tmdbId, mediaType, season) {
 
         if (!title) return null;
 
-        var query = seasonNum > 1 ? title + " Season " + seasonNum : title;
+        var searchTitle = deaccent(title);
+        var query = seasonNum > 1 ? searchTitle + " Season " + seasonNum : searchTitle;
         var gql = {
             query: "query($search:String){Page(page:1,perPage:20){media(search:$search,type:ANIME,sort:[POPULARITY_DESC]){id format episodes title{english romaji}startDate{year}}}}",
             variables: { search: query }
