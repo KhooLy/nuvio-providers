@@ -206,15 +206,29 @@ function decryptPayload(enc) {
     return JSON.parse(utf8Decode(raw.subarray(0, end)));
 }
 
-function resolveAnilistId(tmdbId, mediaType) {
+function normalizeTitle(value) {
+    return String(value || "").toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function titleMatches(candidate, want) {
+    var a = normalizeTitle(candidate), b = normalizeTitle(want);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (a.length < 4 || b.length < 4) return false;
+    return a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
+}
+
+function resolveAnilistId(tmdbId, mediaType, season) {
     var idStr = String(tmdbId || "").trim();
-    console.log("[HI][ANILIST] resolving id=" + idStr + " type=" + mediaType);
+    var seasonNum = parseInt(season, 10) || 1;
+    console.log("[HI][ANILIST] resolving id=" + idStr + " type=" + mediaType + " season=" + seasonNum);
 
     var TMDB_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
     var isImdb = /^tt\d+$/i.test(idStr);
 
     if (!TMDB_KEY && !isImdb && /^\d+$/.test(idStr)) {
-        return Promise.resolve({ anilistId: idStr, title: "Anime" });
+        return Promise.resolve(null);
     }
 
     var tmdbFetchUrl;
@@ -242,13 +256,12 @@ function resolveAnilistId(tmdbId, mediaType) {
             }
         }
 
-        if (!title) {
-            return { anilistId: idStr, title: "Anime" };
-        }
+        if (!title) return null;
 
+        var query = seasonNum > 1 ? title + " Season " + seasonNum : title;
         var gql = {
-            query: "query($search:String){Page(page:1,perPage:5){media(search:$search,type:ANIME,sort:[POPULARITY_DESC]){id format title{english romaji}startDate{year}}}}",
-            variables: { search: title }
+            query: "query($search:String){Page(page:1,perPage:20){media(search:$search,type:ANIME,sort:[POPULARITY_DESC]){id format episodes title{english romaji}startDate{year}}}}",
+            variables: { search: query }
         };
 
         return fetch(ANILIST_API, {
@@ -259,14 +272,29 @@ function resolveAnilistId(tmdbId, mediaType) {
         .then(function (r) { return r.json(); })
         .then(function (data) {
             var mediaList = data && data.data && data.data.Page && data.data.Page.media;
-            if (!mediaList || !mediaList.length) {
-                return { anilistId: idStr, title: title };
-            }
+            if (!mediaList || !mediaList.length) return null;
 
-            var best = mediaList[0];
+            var matches = mediaList.filter(function (item) {
+                return item.title && (titleMatches(item.title.english, title) || titleMatches(item.title.romaji, title));
+            });
+            if (seasonNum > 1) {
+                var sre = new RegExp("season\\s*" + seasonNum + "\\b|\\b" + seasonNum + "(st|nd|rd|th) season\\b");
+                matches = matches.filter(function (item) {
+                    return sre.test(normalizeTitle(item.title.english)) || sre.test(normalizeTitle(item.title.romaji));
+                });
+            } else {
+                var plain = matches.filter(function (item) {
+                    var t = normalizeTitle(item.title.english) + " " + normalizeTitle(item.title.romaji);
+                    return !/season\s*\d+|final season/.test(t);
+                });
+                if (plain.length) matches = plain;
+            }
+            if (!matches.length) return null;
+
+            var best = matches[0];
             if (year) {
-                for (var mi = 0; mi < mediaList.length; mi++) {
-                    var item = mediaList[mi];
+                for (var mi = 0; mi < matches.length; mi++) {
+                    var item = matches[mi];
                     if (item.startDate && item.startDate.year && String(item.startDate.year) === String(year)) {
                         best = item;
                         break;
@@ -276,11 +304,11 @@ function resolveAnilistId(tmdbId, mediaType) {
 
             var foundTitle = (best.title && (best.title.english || best.title.romaji)) || title;
             console.log("[HI][ANILIST] matched AniList id=" + best.id + " title=" + foundTitle);
-            return { anilistId: best.id, title: foundTitle };
+            return { anilistId: best.id, title: foundTitle, episodes: best.episodes || 0 };
         })
         .catch(function (e) {
             console.log("[HI][ANILIST] GraphQL error: " + (e.message || e));
-            return { anilistId: idStr, title: title };
+            return null;
         });
     });
 }
@@ -357,9 +385,13 @@ function getStreams(tmdbId, mediaType, season, episode) {
     var epNum = episode || 1;
     console.log("[HI][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + epNum);
 
-    return resolveAnilistId(tmdbId, mediaType).then(function (resolved) {
+    return resolveAnilistId(tmdbId, mediaType, season).then(function (resolved) {
         if (!resolved || !resolved.anilistId) {
             console.log("[HI][RESOLVE] failed to get AniList ID");
+            return [];
+        }
+        if (resolved.episodes && epNum > resolved.episodes) {
+            console.log("[HI][EPISODE] " + epNum + " outside AniList episode count " + resolved.episodes);
             return [];
         }
 

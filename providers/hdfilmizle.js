@@ -93,9 +93,18 @@ function getTmdbMetadata(tmdbId, mediaType) {
 }
 
 function titleContains(a, b) {
-    return typeof a === "string" && typeof b === "string" &&
-           a.length > 0 && b.length > 0 &&
-           (a.indexOf(b) !== -1 || b.indexOf(a) !== -1);
+    if (typeof a !== "string" || typeof b !== "string") return false;
+    a = normalizeTitle(a);
+    b = normalizeTitle(b);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (b.length < 4 || a.length < 4) return false;
+    var at = a.split(" "), bt = b.split(" ");
+    var shorter = at.length <= bt.length ? at : bt;
+    var longer = at.length <= bt.length ? bt : at;
+    if (shorter.length < 2) return false;
+    for (var i = 0; i < shorter.length; i++) if (longer.indexOf(shorter[i]) === -1) return false;
+    return true;
 }
 
 function normalizeTitle(value) {
@@ -385,18 +394,20 @@ function getStreams(tmdbId, mediaType, season, episode) {
 
             if (!trTitle && !enTitle) { console.log("[HD][TMDB] no usable title"); return null; }
 
-            return searchContent(trTitle)
-                .then(function(results) {
-                    if (results && results.length > 0) {
-                        return { results: results, trTitle: trTitle, enTitle: enTitle, year: year };
+            var searches = [searchContent(trTitle)];
+            if (enTitle && enTitle !== trTitle) searches.push(searchContent(enTitle));
+            return Promise.all(searches).then(function(groups) {
+                var results = [], seen = {};
+                for (var g = 0; g < groups.length; g++) {
+                    for (var i = 0; i < groups[g].length; i++) {
+                        var item = groups[g][i];
+                        if (!item || !item.slug || seen[item.slug]) continue;
+                        seen[item.slug] = true;
+                        results.push(item);
                     }
-                    if (enTitle && enTitle !== trTitle) {
-                        return searchContent(enTitle).then(function(r2) {
-                            return { results: r2 || [], trTitle: trTitle, enTitle: enTitle, year: year };
-                        });
-                    }
-                    return { results: [], trTitle: trTitle, enTitle: enTitle, year: year };
-                });
+                }
+                return { results: results, trTitle: trTitle, enTitle: enTitle, year: year };
+            });
         })
         .then(function(ctx) {
             if (!ctx) return [];
@@ -446,9 +457,9 @@ function getStreams(tmdbId, mediaType, season, episode) {
                         tabPanes.eq(season - 1).find("a").each(function(idx, elem) {
                             if (episodeUrl) return; // guard
                             var href = $(elem).attr("href") || "";
-                            console.log("[HD][EPISODE] candidate: " + href);
-                            if (href.indexOf("/bolum-" + episode + "/") !== -1 ||
-                                href.indexOf("/bolum-" + episode) !== -1) {
+                            var em = /\/bolum-(\d+)(?:\/|$)/.exec(href);
+                            if (em && parseInt(em[1], 10) === parseInt(episode, 10)) {
+                                console.log("[HD][EPISODE] candidate: " + href);
                                 episodeUrl = href;
                             }
                         });

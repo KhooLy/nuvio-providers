@@ -134,7 +134,7 @@ function findSeries(meta) {
         console.log("[DBX][PROBE] " + cands.length + " candidates, " + live.length + " live");
         var idx = 0, best = null;
         function next() {
-            if (idx >= live.length) return Promise.resolve(best);
+            if (idx >= live.length) return Promise.resolve(best && best.score >= 75 ? best : null);
             if (best && best.score >= 90) return Promise.resolve(best);
             var slug = live[idx++];
             var url = BASE + "/diziler/" + slug + "/";

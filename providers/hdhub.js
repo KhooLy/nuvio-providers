@@ -44,7 +44,7 @@ function findPage(html, title, year, isTv) {
     var want = normalize(title);
     var re = /href="(\/[^"]+-(movie|series)-\d+\/)"/g;
     var seen = {};
-    var best = null;
+    var out = [];
     var m;
     while ((m = re.exec(html)) !== null) {
         var href = m[1];
@@ -59,9 +59,15 @@ function findPage(html, title, year, isTv) {
         for (var i = 0; i < tokens.length; i++) if (tokens[i] && slug.indexOf(tokens[i]) !== -1) hit++;
         score += 30 * hit / Math.max(1, tokens.length);
         if (year && href.indexOf(String(year)) !== -1) score += 5;
-        if (!best || score > best.score) best = { score: score, href: href };
+        if (score >= 60) out.push({ score: score, href: href });
     }
-    return best ? BASE + best.href : null;
+    out.sort(function (a, b) { return b.score - a.score; });
+    return out.slice(0, 5).map(function (x) { return BASE + x.href; });
+}
+
+function publishedYear(html) {
+    var m = /"datePublished":"(\d{4})"/.exec(html);
+    return m ? m[1] : "";
 }
 
 function qualityLabel(title) {
@@ -367,10 +373,24 @@ function getStreams(tmdbId, mediaType, season, episode) {
         var year = (meta.release_date || meta.first_air_date || "").split("-")[0];
         if (!title) return [];
         return fetchText(BASE + "/?s=" + encodeURIComponent(title)).then(function(html) {
-            var pageUrl = findPage(html, title, year, isTv);
-            if (!pageUrl) return [];
-            console.log("[HDH][PAGE] " + pageUrl);
-            return fetchText(pageUrl).then(function(pageHtml) {
+            var pages = findPage(html, title, year, isTv);
+            if (!pages.length) return [];
+            var idx = 0;
+            function tryPage() {
+                if (idx >= pages.length) return Promise.resolve("");
+                var pageUrl = pages[idx++];
+                console.log("[HDH][PAGE] " + pageUrl);
+                return fetchText(pageUrl).then(function(pageHtml) {
+                    var py = publishedYear(pageHtml);
+                    if (year && py && Math.abs(parseInt(py, 10) - parseInt(year, 10)) > 1) {
+                        console.log("[HDH][SKIP] year " + py + " != " + year);
+                        return tryPage();
+                    }
+                    return pageHtml;
+                });
+            }
+            return tryPage().then(function(pageHtml) {
+                if (!pageHtml) return [];
                 var items = parseItems(pageHtml);
                 console.log("[HDH][ITEMS] " + items.length);
                 items = pickEpisodes(items, isTv, season, episode);

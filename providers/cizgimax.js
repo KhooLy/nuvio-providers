@@ -87,11 +87,17 @@ function pickResult(list, meta) {
         var isFilm = href.indexOf("/film/") === 0;
         if (isFilm === meta.isTv) continue;
         var s = Math.max(scoreHref(href, want), wantOriginal ? scoreHref(href, wantOriginal) : 0);
-        if (meta.year && href.indexOf(meta.year) !== -1) s += 5;
+        if (meta.year) {
+            if (href.indexOf(meta.year) !== -1) s += 40;
+            else {
+                var ym = /-(19\d{2}|20\d{2})-/.exec(href);
+                if (ym && Math.abs(parseInt(ym[1], 10) - parseInt(meta.year, 10)) > 1) s -= 40;
+            }
+        }
         if (!best || s > best.score) best = { score: s, href: href };
     }
-    if (!best && list.length) best = { score: 0, href: list[0] };
-    return best ? BASE + best.href : null;
+    if (!best || best.score < 60) return null;
+    return BASE + best.href;
 }
 
 function findEpisode(seriesHtml, season, episode) {
@@ -105,11 +111,6 @@ function findEpisode(seriesHtml, season, episode) {
     }
     for (var i = 0; i < links.length; i++) {
         if (links[i].season === s && links[i].episode === e) return BASE + links[i].href;
-    }
-    if (e) {
-        for (var j = 0; j < links.length; j++) {
-            if (links[j].episode === e) return BASE + links[j].href;
-        }
     }
     return null;
 }

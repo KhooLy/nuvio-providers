@@ -79,10 +79,16 @@ function pickShow(list, meta) {
         var item = list[i];
         if (!item || !item.url) continue;
         var s = Math.max(scoreShow(item, want), wantOriginal ? scoreShow(item, wantOriginal) : 0);
-        if (meta.year && String(item.title || "").indexOf(meta.year) !== -1) s += 5;
+        if (meta.year) {
+            if (String(item.title || "").indexOf(meta.year) !== -1) s += 40;
+            else {
+                var ym = /(19\d{2}|20\d{2})/.exec(String(item.title || ""));
+                if (ym && Math.abs(parseInt(ym[1], 10) - parseInt(meta.year, 10)) > 1) s -= 40;
+            }
+        }
         if (!best || s > best.score) best = { score: s, item: item };
     }
-    return best ? best.item : null;
+    return best && best.score >= 60 ? best.item : null;
 }
 
 function slugFromUrl(url) {

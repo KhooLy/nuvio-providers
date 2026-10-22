@@ -408,8 +408,17 @@ function rankCandidates(list, meta) {
         if (item.used_type && item.used_type !== wantType) continue;
         var isFilm = item.used_slug.indexOf("movies/") === 0 || item.used_slug.indexOf("movie/") === 0;
         if (isFilm === meta.isTv) continue;
+        var imdbMatch = meta.imdbId && item.object_related_imdb_id === meta.imdbId;
+        var names = [item.object_name, item.object_alternative_name, item.object_name_alternative];
+        var titleMatch = false;
+        for (var n = 0; n < names.length; n++) {
+            var name = normalize(names[n]);
+            if (name && (name === normalize(meta.title) || name === normalize(meta.original))) titleMatch = true;
+        }
+        if (!imdbMatch && !titleMatch) continue;
+        if (!imdbMatch && meta.year && item.object_release_year && Math.abs(parseInt(item.object_release_year, 10) - parseInt(meta.year, 10)) > 1) continue;
         var score = scoreResult(item, meta);
-        if (meta.imdbId && item.object_related_imdb_id && item.object_related_imdb_id === meta.imdbId) score += 200;
+        if (imdbMatch) score += 200;
         ranked.push({ score: score, item: item });
     }
     ranked.sort(function (a, b) { return b.score - a.score; });
@@ -420,15 +429,14 @@ function findEpisodeUrl(html, season, episode) {
     var s = parseInt(season, 10) || 1;
     var e = parseInt(episode, 10) || 1;
     var re = /href="([^"]*\/bolum\/[^"]+)"/g;
-    var m, exact = null, loose = null;
+    var m, exact = null;
     while ((m = re.exec(html)) !== null) {
         var href = m[1];
         var mm = /-(\d+)x(\d+)(?:-c\d+)?\/?$/.exec(href);
         if (!mm) continue;
         if (parseInt(mm[1], 10) === s && parseInt(mm[2], 10) === e) exact = href;
-        else if (!loose && parseInt(mm[2], 10) === e) loose = href;
     }
-    return exact || loose;
+    return exact;
 }
 
 function extractPayload(html) {
@@ -596,11 +604,19 @@ function getStreams(tmdbId, mediaType, season, episode) {
         meta.season = season;
         meta.episode = episode;
         console.log("[DP][TMDB] id=" + tmdbId + " TR=" + meta.title + " EN=" + meta.original + " year=" + meta.year);
-        return searchSite(base, meta.title).then(function (results) {
-            if ((!results || !results.length) && meta.original) {
-                return searchSite(base, meta.original).then(function (r2) { return r2 || []; });
+        var searches = [searchSite(base, meta.title)];
+        if (meta.original && normalize(meta.original) !== normalize(meta.title)) searches.push(searchSite(base, meta.original));
+        return Promise.all(searches).then(function (groups) {
+            var results = [], seen = {};
+            for (var g = 0; g < groups.length; g++) {
+                for (var i = 0; i < groups[g].length; i++) {
+                    var item = groups[g][i];
+                    if (!item || !item.used_slug || seen[item.used_slug]) continue;
+                    seen[item.used_slug] = true;
+                    results.push(item);
+                }
             }
-            return results || [];
+            return results;
         }).then(function (results) {
             var items = rankCandidates(results, meta);
             console.log("[DP][MATCH] candidates=" + items.length);
