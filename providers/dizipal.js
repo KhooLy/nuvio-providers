@@ -9,7 +9,6 @@ var MAX_RESULTS = 10;
 var MAX_CANDIDATES = 5;
 var CANDIDATE_PARALLEL = 3;
 var CANDIDATE_STAGGER = 250;
-var TOKEN_TTL = 600000;
 
 var MASK64 = (1n << 64n) - 1n;
 var SHA512_K = [
@@ -267,11 +266,9 @@ function normalize(value) {
 function probe(base) {
     return fetch(base + "/arama-yap", { headers: { "User-Agent": USER_AGENT }, redirect: "follow" }).then(function (r) {
         return r.text().then(function (html) {
-            if (!html || html.indexOf("cKey") === -1) return null;
+            if (!html || html.indexOf("/arama-yap") === -1) return null;
             var m = /^(https?:\/\/[^\/]+)/.exec(r.url || "");
-            var host = m ? m[1] : base;
-            cacheTokens(host, html);
-            return host;
+            return m ? m[1] : base;
         });
     }).catch(function () { return null; });
 }
@@ -360,52 +357,25 @@ function tmdbMeta(tmdbId, mediaType) {
     });
 }
 
-var tokenCache = null;
-
-function cacheTokens(base, page) {
-    var km = /name="cKey" value="([^"]+)"/.exec(page);
-    if (!km) return;
-    var vm = /name="cValue"\s*value="([^"]*)"/.exec(page);
-    tokenCache = { base: base, key: km[1], value: vm ? vm[1] : "", at: Date.now() };
-}
-
-function searchTokens(base) {
-    if (tokenCache && tokenCache.base === base && (Date.now() - tokenCache.at) < TOKEN_TTL) {
-        return Promise.resolve(tokenCache);
-    }
-    return fetchText(base + "/arama-yap", { "User-Agent": USER_AGENT }).then(function (page) {
-        cacheTokens(base, page);
-        return (tokenCache && tokenCache.base === base) ? tokenCache : null;
-    });
-}
-
-function searchContent(base, tokens, term) {
-    var body = "cKey=" + encodeURIComponent(tokens.key) +
-        "&cValue=" + encodeURIComponent(tokens.value) +
-        "&type=hepsi&searchterm=" + encodeURIComponent(term);
-    return fetchJson(base + "/bg/searchcontent", {
+function searchAction(base, action, term) {
+    var body = JSON.stringify({ action: action, params: [term] });
+    return fetchJson(base + "/api/mj", {
         "User-Agent": USER_AGENT,
+        "Origin": base,
         "Referer": base + "/arama-yap",
-        "X-Requested-With": "XMLHttpRequest",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        "Content-Type": "application/json"
     }, { method: "POST", body: body }).then(function (res) {
-        var list = res && res.data && res.data.result;
-        return Array.isArray(list) ? list : [];
+        return res && res.ok && Array.isArray(res.result) ? res.result : [];
     });
 }
 
 function searchSite(base, term) {
-    return searchTokens(base).then(function (tokens) {
-        if (!tokens) return [];
-        return searchContent(base, tokens, term).then(function (arr) {
-            console.log("[DP][SEARCH] term=" + term + " results=" + arr.length);
-            if (arr.length || (Date.now() - tokens.at) < 30000) return arr;
-            tokenCache = null;
-            return searchTokens(base).then(function (fresh) {
-                if (!fresh || fresh.key === tokens.key) return arr;
-                return searchContent(base, fresh, term);
-            });
-        });
+    if (String(term || "").trim().length < 3) return Promise.resolve([]);
+    return searchAction(base, "searchContent", term).then(function (list) {
+        return list.length ? list : searchAction(base, "searchContentFullText", term);
+    }).then(function (list) {
+        console.log("[DP][SEARCH] term=" + term + " results=" + list.length);
+        return list;
     });
 }
 
@@ -462,47 +432,23 @@ function findEpisodeUrl(html, season, episode) {
 }
 
 function extractPayload(html) {
-    var m = /data-rm-k="true">([\s\S]*?)<\/div>/.exec(html);
-    if (!m) return null;
-    var text = m[1]
-        .replace(/&quot;/g, '"').replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#039;/g, "'");
-    try { return JSON.parse(text); } catch (e) { return null; }
-}
-
-function dynamicPassphrases(html) {
-    var m = /<script[^>]*src="([^"]*app-dizipals[^"]*)"/.exec(html);
-    if (!m) return Promise.resolve([]);
-    var src = m[1];
-    if (src.indexOf("//") === 0) src = "https:" + src;
-    return fetchText(src, { "User-Agent": USER_AGENT }).then(function (js) {
-        var out = [];
-        var re = /'([A-Za-z0-9+\/=]{80,})'|"([A-Za-z0-9+\/=]{80,})"/g, mm;
-        while ((mm = re.exec(js)) !== null) {
-            var cand = mm[1] || mm[2];
-            if (out.indexOf(cand) === -1) out.push(cand);
-        }
-        return out.slice(0, 40);
-    });
+    var text = String(html || "").replace(/\\"/g, '"');
+    var enc = /"enc":\{"ciphertext":"([^"]+)","iv":"([^"]+)","salt":"([^"]+)"\}/.exec(text);
+    if (!enc) return null;
+    var km = /"enc":\{[^}]*\},"k":"([^"]+)"/.exec(text);
+    return { ciphertext: enc[1], iv: enc[2], salt: enc[3], k: km ? km[1] : "" };
 }
 
 function resolveIframeTarget(html) {
     var payload = extractPayload(html);
     if (!payload) return Promise.resolve(null);
-    var tryPass = function (pass) {
+    var passes = [payload.k, PASSPHRASE].filter(function (p, i, arr) { return p && arr.indexOf(p) === i; });
+    for (var i = 0; i < passes.length; i++) {
         var out = "";
-        try { out = decryptPayload(pass, payload); } catch (e) { out = ""; }
-        return (/^https?:\/\//.test(out) || out.indexOf("//") === 0) ? out : null;
-    };
-    var direct = tryPass(PASSPHRASE);
-    if (direct) return Promise.resolve(direct);
-    return dynamicPassphrases(html).then(function (cands) {
-        for (var i = 0; i < cands.length; i++) {
-            var got = tryPass(cands[i]);
-            if (got) return got;
-        }
-        return null;
-    });
+        try { out = decryptPayload(passes[i], payload); } catch (e) { out = ""; }
+        if (/^https?:\/\//.test(out) || out.indexOf("//") === 0) return Promise.resolve(out);
+    }
+    return Promise.resolve(null);
 }
 
 function toAbsolute(url) {
@@ -555,6 +501,21 @@ function resolveIframe(iframeUrl, base) {
     });
 }
 
+function seasonPage(base, pageHtml, season) {
+    var s = parseInt(season, 10) || 1;
+    if (s === 1) return Promise.resolve(pageHtml);
+    var re = /\/sezon\/[^"\\]+/g, m, path = null;
+    while ((m = re.exec(pageHtml)) !== null) {
+        var mm = /sezon-(\d+)(?:-c\d+)?(?:[?"#]|$)/.exec(m[0]);
+        if (mm && parseInt(mm[1], 10) === s) { path = m[0]; break; }
+    }
+    if (!path) return Promise.resolve(pageHtml);
+    var url = /^https?:/i.test(path) ? path : base + path;
+    return fetchText(url, { "User-Agent": USER_AGENT, "Referer": base + "/" }).then(function (html) {
+        return html || pageHtml;
+    });
+}
+
 function episodePage(base, meta, pageHtml) {
     var epPath = findEpisodeUrl(pageHtml, meta.season, meta.episode);
     if (!epPath) return Promise.resolve("");
@@ -567,9 +528,11 @@ function tryCandidate(base, meta, item) {
     return fetchText(pageUrl, { "User-Agent": USER_AGENT, "Referer": base + "/" }).then(function (pageHtml) {
         if (!pageHtml) return [];
         if (!meta.isTv) return pageHtml;
-        return episodePage(base, meta, pageHtml).then(function (h) {
-            console.log("[DP][EPISODE] url=" + pageUrl + " s=" + meta.season + " e=" + meta.episode + " found=" + (h ? "yes" : "no"));
-            return h;
+        return seasonPage(base, pageHtml, meta.season).then(function (seasonHtml) {
+            return episodePage(base, meta, seasonHtml).then(function (h) {
+                console.log("[DP][EPISODE] url=" + pageUrl + " s=" + meta.season + " e=" + meta.episode + " found=" + (h ? "yes" : "no"));
+                return h;
+            });
         });
     }).then(function (mediaHtml) {
         if (!mediaHtml) return [];
