@@ -222,6 +222,7 @@ function titleMatches(candidate, want) {
 function resolveAnilistId(tmdbId, mediaType, season) {
     var idStr = String(tmdbId || "").trim();
     var seasonNum = parseInt(season, 10) || 1;
+    var isTv = (mediaType === "tv" || mediaType === "series" || mediaType === "anime");
     console.log("[HI][ANILIST] resolving id=" + idStr + " type=" + mediaType + " season=" + seasonNum);
 
     var TMDB_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
@@ -291,16 +292,25 @@ function resolveAnilistId(tmdbId, mediaType, season) {
             }
             if (!matches.length) return null;
 
-            var best = matches[0];
-            if (year) {
-                for (var mi = 0; mi < matches.length; mi++) {
-                    var item = matches[mi];
-                    if (item.startDate && item.startDate.year && String(item.startDate.year) === String(year)) {
-                        best = item;
-                        break;
-                    }
+            var formats = isTv ? ["TV", "TV_SHORT", "ONA"] : ["MOVIE"];
+            var byFormat = matches.filter(function (item) { return formats.indexOf(item.format) !== -1; });
+            if (byFormat.length) matches = byFormat;
+
+            if (seasonNum === 1 && year) {
+                var exact = matches.filter(function (item) {
+                    return item.startDate && String(item.startDate.year) === String(year);
+                });
+                if (exact.length) matches = exact;
+                else {
+                    matches = matches.filter(function (item) {
+                        var y = item.startDate && item.startDate.year;
+                        return y && Math.abs(parseInt(y, 10) - parseInt(year, 10)) <= 1;
+                    });
+                    if (!matches.length) return null;
                 }
             }
+
+            var best = matches[0];
 
             var foundTitle = (best.title && (best.title.english || best.title.romaji)) || title;
             console.log("[HI][ANILIST] matched AniList id=" + best.id + " title=" + foundTitle);
