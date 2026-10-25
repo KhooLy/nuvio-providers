@@ -180,6 +180,28 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "anikoto",
+      "name": "Anikoto",
+      "description": "Anime streams (SUB + DUB) with multi-language subtitles from anikoto.cz via Megaplay",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/anikoto.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }

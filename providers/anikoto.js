@@ -1,0 +1,594 @@
+var BASE = "https://anikoto.cz";
+var MEGAPLAY_BASE = "https://megaplay.buzz";
+var ADDON_NAME = "Anikoto";
+var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0";
+var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
+
+var HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9"
+};
+
+var MEGAPLAY_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Referer": MEGAPLAY_BASE + "/",
+    "Origin": MEGAPLAY_BASE
+};
+
+var ENC_KEY = "i?LMTAx0Q6,:}50U";
+var ENC_IV = "W0;27ToaUpl_P%'c";
+
+function fetchText(url, headers) {
+    return fetch(url, { headers: headers || HEADERS, redirect: "follow" })
+        .then(function (r) {
+            return r.text().then(function (body) {
+                if (!r.ok) {
+                    console.log("[AN][HTTP] " + r.status + " " + url);
+                    return null;
+                }
+                return body;
+            });
+        })
+        .catch(function (e) {
+            console.log("[AN][FETCH] " + (e.message || e) + " url=" + url);
+            return null;
+        });
+}
+
+function fetchJson(url, headers) {
+    return fetchText(url, headers).then(function (body) {
+        if (!body) return null;
+        try { return JSON.parse(body); } catch (e) { return null; }
+    });
+}
+
+function ajaxHeaders(referer) {
+    return {
+        "User-Agent": USER_AGENT,
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Referer": referer
+    };
+}
+
+var B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+function b64UrlDecode(str) {
+    var map = {};
+    for (var i = 0; i < B64_CHARS.length; i++) map[B64_CHARS[i]] = i;
+    var clean = String(str).replace(/[^A-Za-z0-9\-_]/g, "");
+    var bytes = [];
+    for (var j = 0; j < clean.length; j += 4) {
+        var c0 = map[clean[j]];
+        var c1 = j + 1 < clean.length ? map[clean[j + 1]] : null;
+        var c2 = j + 2 < clean.length ? map[clean[j + 2]] : null;
+        var c3 = j + 3 < clean.length ? map[clean[j + 3]] : null;
+        bytes.push((c0 << 2) | (c1 === null ? 0 : c1 >> 4));
+        if (c2 !== null) bytes.push(((c1 & 15) << 4) | (c2 >> 2));
+        if (c3 !== null) bytes.push(((c2 & 3) << 6) | c3);
+    }
+    return new Uint8Array(bytes);
+}
+
+function utf8Encode(str) {
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c < 0x80) bytes.push(c);
+        else if (c < 0x800) { bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }
+        else if (c < 0xd800 || c >= 0xe000) { bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
+        else {
+            i++;
+            var cp = 0x10000 + (((c & 0x3ff) << 10) | (str.charCodeAt(i) & 0x3ff));
+            bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+        }
+    }
+    return new Uint8Array(bytes);
+}
+
+function utf8Decode(bytes) {
+    var out = "";
+    for (var i = 0; i < bytes.length;) {
+        var c = bytes[i++];
+        if (c < 0x80) out += String.fromCharCode(c);
+        else if (c < 0xe0) out += String.fromCharCode(((c & 31) << 6) | (bytes[i++] & 63));
+        else if (c < 0xf0) out += String.fromCharCode(((c & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63));
+        else {
+            var cp = ((c & 7) << 18) | ((bytes[i++] & 63) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+            cp -= 0x10000;
+            out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+        }
+    }
+    return out;
+}
+
+function padBytes(str, len) {
+    var src = utf8Encode(str);
+    var out = new Uint8Array(len);
+    out.set(src.subarray(0, Math.min(len, src.length)));
+    return out;
+}
+
+var AES_SBOX = new Uint8Array(256);
+(function () {
+    var p = 1, q = 1;
+    do {
+        p = (p ^ (p << 1) ^ (p & 0x80 ? 0x1b : 0)) & 255;
+        q ^= q << 1; q ^= q << 2; q ^= q << 4; q &= 255;
+        if (q & 0x80) q ^= 0x09;
+        var x = q ^ ((q << 1) | (q >> 7)) ^ ((q << 2) | (q >> 6)) ^ ((q << 3) | (q >> 5)) ^ ((q << 4) | (q >> 4));
+        AES_SBOX[p] = (x ^ 0x63) & 255;
+    } while (p !== 1);
+    AES_SBOX[0] = 0x63;
+})();
+
+var AES_INV_SBOX = new Uint8Array(256);
+for (var inv = 0; inv < 256; inv++) AES_INV_SBOX[AES_SBOX[inv]] = inv;
+
+function aesExpandKey(key) {
+    var Nk = key.length / 4;
+    var Nr = Nk + 6;
+    var words = 4 * (Nr + 1);
+    var w = new Uint8Array(words * 4);
+    w.set(key);
+    var rcon = 1;
+    for (var i = Nk; i < words; i++) {
+        var t0 = w[(i - 1) * 4];
+        var t1 = w[(i - 1) * 4 + 1];
+        var t2 = w[(i - 1) * 4 + 2];
+        var t3 = w[(i - 1) * 4 + 3];
+        if (i % Nk === 0) {
+            var tmp = t0;
+            t0 = AES_SBOX[t1] ^ rcon;
+            t1 = AES_SBOX[t2];
+            t2 = AES_SBOX[t3];
+            t3 = AES_SBOX[tmp];
+            rcon = ((rcon << 1) ^ (rcon & 0x80 ? 0x1b : 0)) & 255;
+        } else if (Nk > 6 && i % Nk === 4) {
+            t0 = AES_SBOX[t0]; t1 = AES_SBOX[t1]; t2 = AES_SBOX[t2]; t3 = AES_SBOX[t3];
+        }
+        w[i * 4]     = w[(i - Nk) * 4]     ^ t0;
+        w[i * 4 + 1] = w[(i - Nk) * 4 + 1] ^ t1;
+        w[i * 4 + 2] = w[(i - Nk) * 4 + 2] ^ t2;
+        w[i * 4 + 3] = w[(i - Nk) * 4 + 3] ^ t3;
+    }
+    return { w: w, Nr: Nr };
+}
+
+function gmul(a, b) {
+    var p = 0;
+    a &= 255;
+    for (var i = 0; i < 8; i++) {
+        if (b & 1) p ^= a;
+        var hi = a & 0x80;
+        a = (a << 1) & 255;
+        if (hi) a ^= 0x1b;
+        b >>= 1;
+    }
+    return p;
+}
+
+function aesDecryptBlock(expanded, block) {
+    var w = expanded.w;
+    var Nr = expanded.Nr;
+    var st = new Uint8Array(16);
+    var base = Nr * 16;
+    for (var i = 0; i < 16; i++) st[i] = block[i] ^ w[base + i];
+
+    for (var round = Nr - 1; round >= 0; round--) {
+        var t = new Uint8Array(16);
+        t[0] = st[0];   t[1] = st[13]; t[2] = st[10];  t[3] = st[7];
+        t[4] = st[4];   t[5] = st[1];  t[6] = st[14];  t[7] = st[11];
+        t[8] = st[8];   t[9] = st[5];  t[10] = st[2];  t[11] = st[15];
+        t[12] = st[12]; t[13] = st[9]; t[14] = st[6];  t[15] = st[3];
+
+        for (var s = 0; s < 16; s++) t[s] = AES_INV_SBOX[t[s]];
+
+        base = round * 16;
+        for (var k = 0; k < 16; k++) t[k] ^= w[base + k];
+
+        if (round !== 0) {
+            for (var c = 0; c < 4; c++) {
+                var a0 = t[c * 4], a1 = t[c * 4 + 1], a2 = t[c * 4 + 2], a3 = t[c * 4 + 3];
+                t[c * 4]     = gmul(a0, 14) ^ gmul(a1, 11) ^ gmul(a2, 13) ^ gmul(a3, 9);
+                t[c * 4 + 1] = gmul(a0, 9)  ^ gmul(a1, 14) ^ gmul(a2, 11) ^ gmul(a3, 13);
+                t[c * 4 + 2] = gmul(a0, 13) ^ gmul(a1, 9)  ^ gmul(a2, 14) ^ gmul(a3, 11);
+                t[c * 4 + 3] = gmul(a0, 11) ^ gmul(a1, 13) ^ gmul(a2, 9)  ^ gmul(a3, 14);
+            }
+        }
+        st = t;
+    }
+    return st;
+}
+
+function aesCbcDecrypt(key, iv, data) {
+    var expanded = aesExpandKey(key);
+    var out = new Uint8Array(data.length);
+    var prev = iv;
+    for (var off = 0; off < data.length; off += 16) {
+        var blk = data.subarray(off, off + 16);
+        var dec = aesDecryptBlock(expanded, blk);
+        for (var i = 0; i < 16; i++) out[off + i] = dec[i] ^ prev[i];
+        prev = blk;
+    }
+    return out;
+}
+
+function decryptPayload(enc) {
+    var key = padBytes(ENC_KEY, 32);
+    var iv  = padBytes(ENC_IV, 16);
+    var raw = aesCbcDecrypt(key, iv, b64UrlDecode(enc));
+    var pad = raw[raw.length - 1];
+    var end = (pad >= 1 && pad <= 16) ? raw.length - pad : raw.length;
+    return JSON.parse(utf8Decode(raw.subarray(0, end)));
+}
+
+function deaccent(value) {
+    return String(value || "").normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[ıİ]/g, "i").replace(/[ß]/g, "ss");
+}
+
+function normalizeTitle(value) {
+    return deaccent(value).toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function titleMatches(candidate, want) {
+    var a = normalizeTitle(candidate), b = normalizeTitle(want);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (a.length < 4 || b.length < 4) return false;
+    return a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
+}
+
+function decodeEntities(value) {
+    return String(value || "")
+        .replace(/&amp;/g, "&")
+        .replace(/&#0*39;|&#x27;/gi, "'")
+        .replace(/&quot;/g, "\"")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&nbsp;/g, " ");
+}
+
+function stripTags(value) {
+    return decodeEntities(String(value || "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function ordinal(n) {
+    var s = ["th", "st", "nd", "rd"];
+    var v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function tmdbMeta(tmdbId, mediaType) {
+    var isTv = (mediaType === "tv" || mediaType === "series" || mediaType === "anime");
+    var type = isTv ? "tv" : "movie";
+    var id = String(tmdbId || "").trim();
+    if (!id) return Promise.resolve(null);
+
+    var url;
+    if (/^tt\d+$/i.test(id)) {
+        url = "https://api.themoviedb.org/3/find/" + encodeURIComponent(id) +
+              "?api_key=" + TMDB_API_KEY + "&external_source=imdb_id";
+        return fetchJson(url).then(function (res) {
+            var list = res && (isTv ? res.tv_results : res.movie_results);
+            if (!list || !list.length) return null;
+            return fetchJson("https://api.themoviedb.org/3/" + type + "/" + list[0].id + "?api_key=" + TMDB_API_KEY);
+        }).then(formatTmdb);
+    }
+
+    url = "https://api.themoviedb.org/3/" + type + "/" + id + "?api_key=" + TMDB_API_KEY;
+    return fetchJson(url).then(formatTmdb);
+}
+
+function formatTmdb(data) {
+    if (!data || (!data.title && !data.name)) return null;
+    var seasons = [];
+    if (data.seasons) {
+        for (var i = 0; i < data.seasons.length; i++) {
+            var s = data.seasons[i];
+            seasons.push({ number: s.season_number, episodes: s.episode_count || 0 });
+        }
+    }
+    return {
+        title: data.title || data.name || "",
+        original: data.original_title || data.original_name || "",
+        year: String(data.release_date || data.first_air_date || "").split("-")[0],
+        seasons: seasons
+    };
+}
+
+function seasonOffset(meta, season) {
+    var offset = 0;
+    if (!meta || !meta.seasons || season <= 1) return offset;
+    for (var i = 0; i < meta.seasons.length; i++) {
+        var s = meta.seasons[i];
+        if (s.number > 0 && s.number < season) offset += s.episodes;
+    }
+    return offset;
+}
+
+function parseSearch(html) {
+    var items = [];
+    if (!html) return items;
+    var blocks = String(html).split('<div class="item');
+    for (var i = 1; i < blocks.length; i++) {
+        var block = blocks[i];
+        var idMatch = /data-tip="(\d+)"/.exec(block);
+        var slugMatch = /\/watch\/([^"\/]+)\/ep-1/.exec(block);
+        var titleMatch = /class="name d-title"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+        if (!idMatch || !slugMatch || !titleMatch) continue;
+        var jpMatch = /data-jp="([^"]*)"/.exec(block);
+        items.push({
+            id: idMatch[1],
+            slug: slugMatch[1],
+            title: stripTags(titleMatch[1]),
+            jp: decodeEntities(jpMatch ? jpMatch[1] : "")
+        });
+    }
+    return items;
+}
+
+function searchAnikoto(queries) {
+    var seen = {};
+    var list = [];
+    return Promise.all(queries.map(function (query) {
+        if (!query) return Promise.resolve([]);
+        var url = BASE + "/filter?keyword=" + encodeURIComponent(query);
+        return fetchText(url, HEADERS).then(parseSearch);
+    })).then(function (results) {
+        for (var i = 0; i < results.length; i++) {
+            for (var j = 0; j < results[i].length; j++) {
+                var item = results[i][j];
+                if (seen[item.id]) continue;
+                seen[item.id] = true;
+                list.push(item);
+            }
+        }
+        return list;
+    });
+}
+
+function pickShow(items, meta, season) {
+    var wanted = [meta.title, meta.original];
+    var matched = items.filter(function (item) {
+        for (var i = 0; i < wanted.length; i++) {
+            if (titleMatches(item.title, wanted[i]) || titleMatches(item.jp, wanted[i])) return true;
+        }
+        return false;
+    });
+    if (!matched.length) return null;
+
+    if (season > 1) {
+        var seasonRe = new RegExp("season\\s*" + season + "\\b|\\b" + season + "(st|nd|rd|th)\\s*season\\b");
+        var seasonMatches = matched.filter(function (item) {
+            return seasonRe.test(normalizeTitle(item.title)) || seasonRe.test(normalizeTitle(item.jp));
+        });
+        if (seasonMatches.length) matched = seasonMatches;
+    } else {
+        var plain = matched.filter(function (item) {
+            return !hasSeasonMarker(item.title) && !hasSeasonMarker(item.jp);
+        });
+        if (plain.length) matched = plain;
+    }
+
+    return matched[0];
+}
+
+function hasSeasonMarker(title) {
+    var normalized = normalizeTitle(title);
+    return /season\s*\d+|\b\d+(st|nd|rd|th)?\s*season\b/.test(normalized);
+}
+
+function findEpisode(html, episode, absoluteEpisode, preferAbsolute) {
+    if (!html) return null;
+    var re = /<a\b[^>]*data-num="\d+"[^>]*>/g;
+    var match;
+    var exact = null;
+    var absolute = null;
+    while ((match = re.exec(html))) {
+        var tag = match[0];
+        var numMatch = /data-num="(\d+)"/.exec(tag);
+        if (!numMatch) continue;
+        var num = parseInt(numMatch[1], 10);
+        if (num === episode) exact = tag;
+        if (absoluteEpisode && num === absoluteEpisode) absolute = tag;
+    }
+    return preferAbsolute ? (absolute || exact) : (exact || absolute);
+}
+
+function dataAttr(tag, name) {
+    var match = new RegExp("data-" + name + '="([^"]*)"').exec(tag);
+    return match ? decodeEntities(match[1]) : "";
+}
+
+function parseServerGroups(html) {
+    var groups = [];
+    if (!html) return groups;
+    var typeRe = /<div class="type" data-type="(sub|dub)">([\s\S]*?)<\/div>/g;
+    var typeMatch;
+    while ((typeMatch = typeRe.exec(html))) {
+        var servers = [];
+        var liRe = /<li\b[^>]*data-sv-id="([^"]+)"[^>]*data-link-id="([^"]+)"[^>]*>([\s\S]*?)<\/li>/g;
+        var liMatch;
+        while ((liMatch = liRe.exec(typeMatch[2]))) {
+            servers.push({
+                id: liMatch[1],
+                link: liMatch[2],
+                name: stripTags(liMatch[3])
+            });
+        }
+        if (servers.length) groups.push({ type: typeMatch[1], servers: servers });
+    }
+    return groups;
+}
+
+function resolveServer(link, referer) {
+    var url = BASE + "/ajax/server?get=" + encodeURIComponent(link);
+    return fetchJson(url, ajaxHeaders(referer)).then(function (data) {
+        if (!data || data.status !== 200 || !data.result || !data.result.url) return null;
+        return data.result;
+    });
+}
+
+function resolveMegaplay(embedUrl, type) {
+    var sMatch = /[?&]s=([^&]+)/.exec(embedUrl);
+    var s = sMatch ? decodeURIComponent(sMatch[1]) : "";
+
+    return fetchText(embedUrl, MEGAPLAY_HEADERS).then(function (html) {
+        var idMatch = /data-id="(\d+)"/.exec(html || "");
+        if (!idMatch) return null;
+
+        var api = MEGAPLAY_BASE + "/stream/getSourcesNew?id=" + idMatch[1] + "&type=" + type;
+        if (s) api += "&s=" + encodeURIComponent(s);
+
+        return fetchJson(api, ajaxHeaders(MEGAPLAY_BASE + "/")).then(function (data) {
+            if (!data) return null;
+
+            var payload = data.sources || null;
+            if (!payload && data.enc) {
+                try { payload = decryptPayload(data.enc); }
+                catch (e) { console.log("[AN][DECRYPT] " + (e.message || e)); return null; }
+            }
+            if (!payload) return null;
+
+            var file = payload.file || (payload.sources && payload.sources[0] && payload.sources[0].file);
+            if (!file) return null;
+
+            return { file: file, tracks: data.tracks || [], intro: data.intro, outro: data.outro };
+        });
+    });
+}
+
+function langCodeFromLabel(label) {
+    if (!label) return "en";
+    var l = label.toLowerCase();
+    if (l.indexOf("english") !== -1)    return "en";
+    if (l.indexOf("arabic") !== -1)     return "ar";
+    if (l.indexOf("french") !== -1)     return "fr";
+    if (l.indexOf("german") !== -1)     return "de";
+    if (l.indexOf("italian") !== -1)    return "it";
+    if (l.indexOf("portuguese") !== -1) return "pt";
+    if (l.indexOf("russian") !== -1)    return "ru";
+    if (l.indexOf("spanish") !== -1)    return "es";
+    if (l.indexOf("japanese") !== -1)   return "ja";
+    if (l.indexOf("turkish") !== -1)    return "tr";
+    return "en";
+}
+
+function buildStream(servers, referer, type, showTitle) {
+    var index = 0;
+
+    function next() {
+        if (index >= servers.length) return Promise.resolve(null);
+        var server = servers[index++];
+        return resolveServer(server.link, referer).then(function (resolved) {
+            if (!resolved) return next();
+            return resolveMegaplay(resolved.url, type).then(function (data) {
+                if (!data) return next();
+
+                var subs = [];
+                for (var i = 0; i < data.tracks.length; i++) {
+                    var t = data.tracks[i];
+                    if (t.file && t.kind === "captions") {
+                        subs.push({
+                            url: t.file,
+                            language: langCodeFromLabel(t.label),
+                            name: t.label || "Subtitle"
+                        });
+                    }
+                }
+
+                var stream = {
+                    name: ADDON_NAME,
+                    title: "1080p · " + type.toUpperCase() + (showTitle ? " · " + showTitle : ""),
+                    url: data.file,
+                    quality: "1080p",
+                    type: "hls",
+                    headers: MEGAPLAY_HEADERS
+                };
+
+                if (subs.length > 0) stream.subtitles = subs;
+                if (data.intro && data.intro.end > data.intro.start) stream.intro = data.intro;
+                if (data.outro && data.outro.end > data.outro.start) stream.outro = data.outro;
+
+                console.log("[AN][STREAM] " + type.toUpperCase() + " ok via " + server.name + ": " + data.file);
+                return stream;
+            });
+        });
+    }
+
+    return next();
+}
+
+function getStreams(tmdbId, mediaType, season, episode) {
+    var seasonNum = parseInt(season, 10) || 1;
+    var epNum = parseInt(episode, 10) || 1;
+    console.log("[AN][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + seasonNum + " e=" + epNum);
+
+    return tmdbMeta(tmdbId, mediaType).then(function (meta) {
+        if (!meta) {
+            console.log("[AN][TMDB] no metadata");
+            return [];
+        }
+
+        var queries = [meta.title, meta.original];
+        if (seasonNum > 1) {
+            queries.push(meta.title + " Season " + seasonNum);
+            queries.push(meta.title + " " + ordinal(seasonNum) + " Season");
+        }
+
+        return searchAnikoto(queries).then(function (items) {
+            var show = pickShow(items, meta, seasonNum);
+            if (!show) {
+                console.log("[AN][SEARCH] no match for " + meta.title);
+                return [];
+            }
+            console.log("[AN][SEARCH] matched " + show.title + " id=" + show.id + " slug=" + show.slug);
+
+            var referer = BASE + "/watch/" + show.slug;
+            var episodeUrl = BASE + "/ajax/episode/list/" + show.id;
+
+            return fetchJson(episodeUrl, ajaxHeaders(referer)).then(function (data) {
+                var html = data && data.status === 200 ? data.result : null;
+                var absolute = epNum + seasonOffset(meta, seasonNum);
+                var preferAbsolute = seasonNum > 1 && !hasSeasonMarker(show.title);
+                var anchor = findEpisode(html, epNum, absolute, preferAbsolute);
+                if (!anchor) {
+                    console.log("[AN][EPISODE] episode " + epNum + " not found");
+                    return [];
+                }
+                console.log("[AN][EPISODE] using data-num=" + dataAttr(anchor, "num") + " for episode " + epNum);
+
+                var ids = dataAttr(anchor, "ids");
+                if (!ids) {
+                    console.log("[AN][EPISODE] no server ids");
+                    return [];
+                }
+
+                var serverUrl = BASE + "/ajax/server/list?servers=" + encodeURIComponent(ids);
+                return fetchJson(serverUrl, ajaxHeaders(referer)).then(function (serverData) {
+                    var groups = parseServerGroups(serverData && serverData.result);
+                    if (!groups.length) {
+                        console.log("[AN][SERVERS] no servers");
+                        return [];
+                    }
+
+                    return Promise.all(groups.map(function (group) {
+                        return buildStream(group.servers, referer, group.type, show.title);
+                    })).then(function (streams) {
+                        return streams.filter(Boolean);
+                    });
+                });
+            });
+        });
+    }).catch(function (err) {
+        console.error("[AN][ERROR] " + (err.message || err));
+        return [];
+    });
+}
+
+module.exports = { getStreams: getStreams };

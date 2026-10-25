@@ -8,6 +8,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | :--- | :--- | :--- | :--- | :--- |
 | **HDFilmizle** | `hdfilmizle` | Movies & Series | TR / EN Audio, EN Subtitles | `hdfilmizle.vip` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
+| **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
 | **Vidlove** | `vidlove` | Movies & Series | HLS | `vidlove.cc` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
@@ -40,6 +41,7 @@ The server will be available at:
 ├── providers/
 │   ├── hdfilmizle.js        # HDFilmizle provider (movies & tv series)
 │   ├── hianime.js           # Hianime provider (anime SUB + DUB)
+│   ├── anikoto.js           # Anikoto provider (anime SUB + DUB)
 │   ├── vidlove.js           # Vidlove provider (all 5 upstream sources in parallel + merged subtitles)
 │   ├── hdhub.js             # HDHub provider (movies & tv, direct MKV)
 │   ├── cizgimax.js          # CizgiMax provider (Turkish cartoon/anime, TV only)
@@ -64,6 +66,9 @@ node -e 'require("./providers/hdfilmizle.js").getStreams("tt0760437", "tv", 1, 1
 
 # Test Hianime
 node -e 'require("./providers/hianime.js").getStreams("154587", "tv", 1, 1).then(console.log)'
+
+# Test Anikoto
+node -e 'require("./providers/anikoto.js").getStreams("115994", "tv", 1, 43).then(console.log)'
 
 # Test CizgiMax
 node -e 'require("./providers/cizgimax.js").getStreams("37854", "tv", 1, 1).then(console.log)'
