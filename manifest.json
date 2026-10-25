@@ -613,6 +613,29 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "sololatino",
+      "name": "SoloLatino",
+      "description": "Latin American movies and series via SoloLatino with HLS streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/sololatino.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "es"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }
