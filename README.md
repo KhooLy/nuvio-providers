@@ -15,6 +15,23 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **SezonlukDizi** | `sezonlukdizi` | Turkish Series | TR Dublaj/Altyazı HLS | `sezonlukdizi.cc` |
 | **DiziPal** | `dizipal` | Movies & Series | TR Dublaj/Altyazı HLS | rotating (via `t.ly/dizipalgiris`) |
 | **DiziBOX** | `dizibox` | Turkish Series | TR Dublaj/Altyazı HLS | `dizibox.live` |
+| **MovieBox** | `moviebox` | Movies & Series | Direct MP4 | MovieBox API |
+| **MoviesDrive** | `moviesdrive` | Movies & Series | EN / HI, HubCloud & Pixeldrain | `moviesdrive.christmas` |
+| **VaPlayer** | `vaplayer` | Movies & Series | HLS | `vaplayer.ru` |
+| **Miruro** | `miruro` | Anime Series | SUB + subtitles | `miruro.to` |
+| **VidLink** | `vidlink` | Movies & Series | HLS + subtitles | `vidlink.pro` |
+| **2Peckle** | `2peckle` | Movies & Series | Direct MP4 | Pengu addon |
+| **ToonWorld4All** | `toonworld4all` | Animated Movies & Series | EN / HI direct links | `toonworld4all.me` |
+| **Ani.pm** | `anipm` | Anime Series | HLS & embeds | `ani.pm` |
+| **Reanime** | `reanime` | Anime Series | SUB | `reanime.cz` |
+| **LaMovie** | `lamovie` | Movies & Series | ES / EN HLS | `lamovie.org` |
+| **Moflix** | `moflix` | Movies & Series | DE HLS | `moflix-stream.xyz` |
+| **KissKH** | `kisskh` | Asian Drama & Anime Series | HLS + subtitles | `kisskh.co` |
+| **HDHub4u** | `hdhub4u` | Movies & Series | EN / HI, HubCloud | `hdhub4u` |
+| **VegaMovies** | `vegamovies` | Movies & Series | EN / HI, Google & GDTot | `vegamovies.lease` |
+| **VidFast** | `vidfast` | Movies & Series | HLS + subtitles | `vidfast.vc` |
+| **Cinejoy** | `cinejoy` | Movies & Series | HLS + Stremio subtitles | `cinejoy.pk` |
+| **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
 
 ---
 
@@ -38,16 +55,7 @@ The server will be available at:
 ```
 ├── manifest.json            # Nuvio provider manifest registry
 ├── server.js                # CORS-enabled local HTTP server
-├── providers/
-│   ├── hdfilmizle.js        # HDFilmizle provider (movies & tv series)
-│   ├── hianime.js           # Hianime provider (anime SUB + DUB)
-│   ├── anikoto.js           # Anikoto provider (anime SUB + DUB)
-│   ├── vidlove.js           # Vidlove provider (all 5 upstream sources in parallel + merged subtitles)
-│   ├── hdhub.js             # HDHub provider (movies & tv, direct MKV)
-│   ├── cizgimax.js          # CizgiMax provider (Turkish cartoon/anime, TV only)
-│   ├── sezonlukdizi.js      # SezonlukDizi provider (Turkish series, dub/sub)
-│   ├── dizipal.js           # DiziPal provider (movies & series, dub/sub, rotating domain)
-│   └── dizibox.js           # DiziBOX provider (Turkish series, dub/sub)
+├── providers/               # One standalone JS provider per manifest entry
 ├── tools/
 │   ├── thumbnail.js         # Retry-based single-frame grabber for vidlove streams
 │   └── sprite.js            # Progressive tiered sprite sheet + preview.vtt generator

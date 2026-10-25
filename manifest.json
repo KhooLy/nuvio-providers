@@ -499,6 +499,96 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "vegamovies",
+      "name": "VegaMovies",
+      "description": "Movies and series via VegaMovies with direct Google links and GDTot fallbacks",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/vegamovies.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "vidfast",
+      "name": "VidFast",
+      "description": "Movies and series via VidFast with HLS streams and subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/vidfast.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "cinejoy",
+      "name": "Cinejoy",
+      "description": "Movies and series via Cinejoy with HLS streams and Stremio subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/cinejoy.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "obejrzyj",
+      "name": "Obejrzyj",
+      "description": "Polish movies and series via Obejrzyj with CDA and Vider embeds",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/obejrzyjto.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mp4"
+      ],
+      "contentLanguage": [
+        "pl"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }
