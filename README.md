@@ -32,6 +32,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **VidFast** | `vidfast` | Movies & Series | HLS + subtitles | `vidfast.vc` |
 | **Cinejoy** | `cinejoy` | Movies & Series | HLS + Stremio subtitles | `cinejoy.pk` |
 | **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
+| **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |
 
 ---
 
