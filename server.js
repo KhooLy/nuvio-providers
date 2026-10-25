@@ -3,22 +3,18 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 3000;
+const PROVIDERS_DIR = path.join(__dirname, 'providers');
 
-const ROUTES = {
-    '/':                       { file: 'manifest.json',           type: 'application/json' },
-    '/manifest.json':          { file: 'manifest.json',           type: 'application/json' },
-    '/providers/hdfilmizle.js':{ file: 'providers/hdfilmizle.js', type: 'application/javascript' },
-    '/providers/hianime.js':   { file: 'providers/hianime.js',    type: 'application/javascript' },
-    '/providers/vidlove.js':   { file: 'providers/vidlove.js',    type: 'application/javascript' },
-    '/providers/hdhub.js':     { file: 'providers/hdhub.js',      type: 'application/javascript' },
-    '/providers/cizgimax.js':  { file: 'providers/cizgimax.js',   type: 'application/javascript' },
-    '/providers/sezonlukdizi.js': { file: 'providers/sezonlukdizi.js', type: 'application/javascript' },
-    '/providers/dizipal.js':   { file: 'providers/dizipal.js',    type: 'application/javascript' },
-    '/providers/anikoto.js':   { file: 'providers/anikoto.js',     type: 'application/javascript' },
-};
+function sendFile(res, filePath, type) {
+    if (!fs.existsSync(filePath)) return false;
+    res.writeHead(200, { 'Content-Type': type });
+    fs.createReadStream(filePath).pipe(res);
+    return true;
+}
 
 const server = http.createServer((req, res) => {
-    console.log(`[Server] ${req.method} ${req.url}`);
+    const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+    console.log(`[Server] ${req.method} ${pathname}`);
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -30,14 +26,13 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    const route = ROUTES[req.url];
-    if (route) {
-        const filePath = path.join(__dirname, route.file);
-        if (fs.existsSync(filePath)) {
-            res.writeHead(200, { 'Content-Type': route.type });
-            fs.createReadStream(filePath).pipe(res);
-            return;
-        }
+    if (req.method === 'GET' && (pathname === '/' || pathname === '/manifest.json')) {
+        if (sendFile(res, path.join(__dirname, 'manifest.json'), 'application/json')) return;
+    }
+
+    if (req.method === 'GET' && /^\/providers\/[A-Za-z0-9_.-]+\.js$/.test(pathname)) {
+        const filePath = path.join(__dirname, pathname);
+        if (filePath.startsWith(PROVIDERS_DIR + path.sep) && sendFile(res, filePath, 'application/javascript')) return;
     }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -46,14 +41,10 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n=== NUVIO LOCAL DEV SERVER ===`);
-    console.log(`Manifest:  http://localhost:${PORT}/manifest.json`);
-    console.log(`HDFilmizle:http://localhost:${PORT}/providers/hdfilmizle.js`);
-    console.log(`Hianime:   http://localhost:${PORT}/providers/hianime.js`);
-    console.log(`Vidlove:   http://localhost:${PORT}/providers/vidlove.js`);
-    console.log(`HDHub:     http://localhost:${PORT}/providers/hdhub.js`);
-    console.log(`CizgiMax:  http://localhost:${PORT}/providers/cizgimax.js`);
-    console.log(`SezonlukDizi: http://localhost:${PORT}/providers/sezonlukdizi.js`);
-    console.log(`DiziPal:   http://localhost:${PORT}/providers/dizipal.js`);
-    console.log(`Anikoto:   http://localhost:${PORT}/providers/anikoto.js`);
+    console.log(`Manifest: http://localhost:${PORT}/manifest.json`);
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
+    for (const scraper of manifest.scrapers) {
+        console.log(`${scraper.name}: http://localhost:${PORT}/${scraper.filename}`);
+    }
     console.log(`==============================\n`);
 });

@@ -202,6 +202,303 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "moviebox",
+      "name": "MovieBox",
+      "description": "Movies and series via MovieBox with direct MP4 streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/moviebox.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "moviesdrive",
+      "name": "MoviesDrive",
+      "description": "Movies and series via MoviesDrive with HubCloud and Pixeldrain links",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/moviesdrive.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "vaplayer",
+      "name": "VaPlayer",
+      "description": "Movies and series via VaPlayer with HLS streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/vaplayer.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "miruro",
+      "name": "Miruro",
+      "description": "Anime series via Miruro with SUB streams and subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/miruro.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "vidlink",
+      "name": "VidLink",
+      "description": "Movies and series via VidLink with HLS streams and subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/vidlink.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "2peckle",
+      "name": "2Peckle",
+      "description": "Movies and series via 2Peckle with direct MP4 streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/2peckle.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "toonworld4all",
+      "name": "ToonWorld4All",
+      "description": "Animated movies and series via ToonWorld4All with direct links",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/toonworld4all.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "anipm",
+      "name": "Ani.pm",
+      "description": "Anime series via Ani.pm with HLS and embed streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/anipm.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "reanime",
+      "name": "Reanime",
+      "description": "Anime series via Reanime with SUB streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/reanime.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "lamovie",
+      "name": "LaMovie",
+      "description": "Movies and series via LaMovie with HLS streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/lamovie.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "es",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "moflix",
+      "name": "Moflix",
+      "description": "Movies and series via Moflix with German HLS streams",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/moflix.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "de"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "kisskh",
+      "name": "KissKH",
+      "description": "Asian drama and anime series via KissKH with HLS streams and subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/kisskh.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "ko",
+        "zh",
+        "ja",
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "hdhub4u",
+      "name": "HDHub4u",
+      "description": "Movies and series via HDHub4u with direct HubCloud links",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/hdhub4u.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }
