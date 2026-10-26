@@ -63,10 +63,14 @@ The server will be available at:
 ├── server.js                # CORS-enabled local HTTP server
 ├── providers/               # One standalone JS provider per manifest entry
 ├── tools/
+│   ├── apply-formatters.js  # Injects the shared stream formatter into providers
+│   ├── formatter.template.js # Rich source/codec/HDR/audio/container labels
 │   ├── thumbnail.js         # Retry-based single-frame grabber for vidlove streams
 │   └── sprite.js            # Progressive tiered sprite sheet + preview.vtt generator
 └── README.md
 ```
+
+> Provider files are standalone, so the shared rich-label formatter is injected into each one with `node tools/apply-formatters.js`.
 
 ---
 
