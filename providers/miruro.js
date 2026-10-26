@@ -847,7 +847,9 @@ function tmdbInfo(tmdbId, mediaType) {
     return {
       title: title,
       original: original || title,
-      year: date ? parseInt(String(date).split("-")[0], 10) : null
+      year: date ? parseInt(String(date).split("-")[0], 10) : null,
+      isAnimation: (data.genres || []).some(function (genre) { return genre.id === 16; }),
+      originalLanguage: data.original_language || ""
     };
   });
 }
@@ -1296,6 +1298,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
     lanes = catLanes.map(tap);
   } else {
     lanes = [tap(tmdbInfo(tmdbId, isTv ? "tv" : "movie").then(function (info) {
+    if (!info.isAnimation) {
+      console.log("[Miruro] skip non-anime " + info.title);
+      return [];
+    }
 
     return mapTMDBToAnime(tmdbId, isTv, info, isTv ? season : 1).then(function (animeIds) {
       if (animeIds) {
