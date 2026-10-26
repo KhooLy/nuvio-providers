@@ -122,7 +122,7 @@ function parseDownloads(html) {
 function resolveNex(url) {
     return fetchText(url).then(function (html) {
         if (!html) return null;
-        var fast = html.match(/https:\/\/fastdl\.[^"'\s<]+\/embed\?download=[^"'\s<]+/i);
+        var fast = html.match(/https:\/\/fastdl\.[^"'\s<]+\/embed(?:\.php)?\?download=[^"'\s<]+/i);
         if (fast) {
             return fetchText(fast[0]).then(function (page) {
                 var direct = page.match(/https:\/\/fastdl\.[^"'\s<]+\/dl\.php\?link=(https:\/\/video-downloads\.googleusercontent\.com\/[^"'\s<]+)/i);
