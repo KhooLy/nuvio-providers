@@ -7,13 +7,45 @@ var MAX_CANDIDATES = 22;
 function fetchText(url, headers, options) {
     var opt = { headers: headers || { "User-Agent": USER_AGENT }, redirect: "follow" };
     if (options && options.method) opt.method = options.method;
-    return fetch(url, opt).then(function (r) { return r.text(); }).catch(function () { return ""; });
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    if (controller) opt.signal = controller.signal;
+    var timer;
+    return Promise.race([
+        fetch(url, opt).then(function (r) { return r.text(); }),
+        new Promise(function (resolve) {
+            timer = setTimeout(function () {
+                if (controller) controller.abort();
+                resolve("");
+            }, 8000);
+        })
+    ]).then(function (body) {
+        clearTimeout(timer);
+        return body;
+    }, function () {
+        clearTimeout(timer);
+        return "";
+    });
 }
 
 function fetchStatus(url) {
-    return fetch(url, { method: "HEAD", headers: { "User-Agent": USER_AGENT }, redirect: "follow" })
-        .then(function (r) { return r.status; })
-        .catch(function () { return 0; });
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer;
+    return Promise.race([
+        fetch(url, { method: "HEAD", headers: { "User-Agent": USER_AGENT }, redirect: "follow", signal: controller ? controller.signal : undefined })
+            .then(function (r) { return r.status; }),
+        new Promise(function (resolve) {
+            timer = setTimeout(function () {
+                if (controller) controller.abort();
+                resolve(0);
+            }, 4000);
+        })
+    ]).then(function (status) {
+        clearTimeout(timer);
+        return status;
+    }, function () {
+        clearTimeout(timer);
+        return 0;
+    });
 }
 
 function fetchJson(url) {
@@ -126,6 +158,23 @@ function scoreHeading(heading, meta, html) {
 
 function findSeries(meta) {
     var cands = candidateSlugs(meta);
+    if (!cands.length) return Promise.resolve(null);
+    var first = cands[0];
+    var firstUrl = BASE + "/diziler/" + first + "/";
+    return fetchText(firstUrl, { "User-Agent": USER_AGENT, "Referer": BASE + "/" }).then(function (html) {
+        var heading = pageHeading(html);
+        if (html && !isSoftMissing(heading, html)) {
+            var score = scoreHeading(heading, meta, html);
+            if (score >= 75) {
+                console.log("[DBX][MATCH] " + first + " -> '" + heading + "' score=" + score);
+                return { slug: first, url: firstUrl, html: html, score: score, heading: heading };
+            }
+        }
+        return probeSeries(cands.slice(1), meta);
+    });
+}
+
+function probeSeries(cands, meta) {
     if (!cands.length) return Promise.resolve(null);
     return Promise.all(cands.map(function (c) {
         return fetchStatus(BASE + "/diziler/" + c + "/").then(function (st) { return { slug: c, status: st }; });
@@ -247,18 +296,38 @@ function resolveStreams(epUrl, seriesUrl) {
     });
 }
 
+
+function directEpisode(meta, season, episode) {
+    var slug = candidateSlugs(meta)[0];
+    if (!slug) return Promise.resolve(null);
+    var s = parseInt(season, 10) || 1;
+    var e = parseInt(episode, 10) || 1;
+    var seriesUrl = BASE + "/diziler/" + slug + "/";
+    var epUrl = BASE + "/" + slug + "-" + s + "-sezon-" + e + "-bolum-hd-1-izle/";
+    return fetchText(epUrl, { "User-Agent": USER_AGENT, "Referer": seriesUrl }).then(function (html) {
+        if (html && html.length > 10000 && playerFrames(html).length) {
+            console.log("[DBX][EPISODE] direct -> " + epUrl);
+            return { url: epUrl, seriesUrl: seriesUrl, html: html };
+        }
+        return null;
+    });
+}
+
 function getStreams(tmdbId, mediaType, season, episode) {
     console.log("[DBX][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + episode);
     return tmdbMeta(tmdbId, mediaType).then(function (meta) {
         if (!meta || !meta.title) { console.log("[DBX][TMDB] no meta for id=" + tmdbId); return null; }
         if (!meta.isTv) { console.log("[DBX][SKIP] movies not supported"); return null; }
         console.log("[DBX][TMDB] TR=" + meta.title + " EN=" + meta.original + " year=" + meta.year);
-        return findSeries(meta).then(function (series) {
-            if (!series) { console.log("[DBX][SERIES] not found"); return null; }
-            return episodeUrl(series, season, episode).then(function (ep) {
-                console.log("[DBX][EPISODE] s=" + season + " e=" + episode + " -> " + (ep || "none"));
-                if (!ep) return null;
-                return resolveStreams(ep, series.url);
+        return directEpisode(meta, season, episode).then(function (direct) {
+            if (direct) return resolveStreams(direct.url, direct.seriesUrl);
+            return findSeries(meta).then(function (series) {
+                if (!series) { console.log("[DBX][SERIES] not found"); return null; }
+                return episodeUrl(series, season, episode).then(function (ep) {
+                    console.log("[DBX][EPISODE] s=" + season + " e=" + episode + " -> " + (ep || "none"));
+                    if (!ep) return null;
+                    return resolveStreams(ep, series.url);
+                });
             });
         });
     }).then(function (streams) {
