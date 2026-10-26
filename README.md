@@ -6,6 +6,9 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 
 | Provider | ID | Content | Audio / Subs | Source |
 | :--- | :--- | :--- | :--- | :--- |
+| **Cinefreak** | `cinefreak` | Movies & Series | EN / HI, direct links | `cinefreak.net` |
+| **Vidy** | `vidy` | Movies & Series | HLS up to 4K, multi-audio | `vidy.st` |
+| **Arctic** | `arctic` | Movies & Series | Multi-quality direct links | PenguPlay |
 | **HDFilmizle** | `hdfilmizle` | Movies & Series | TR / EN Audio, EN Subtitles | `hdfilmizle.vip` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
 | **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
