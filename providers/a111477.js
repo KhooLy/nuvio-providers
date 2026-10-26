@@ -357,7 +357,7 @@ function detectLanguages(text) {
         ['Indonesian', /\b(?:indonesian|ind)\b/i],
         ['Filipino', /\b(?:filipino|tagalog|fil)\b/i],
         ['Dutch', /\b(?:dutch|dut|nld)\b/i],
-        ['Polish', /\b(?:polish|pol)\b/i],
+        ['Polish', /\b(?:polish|pol|pl)\b/i],
         ['Swedish', /\b(?:swedish|swe)\b/i],
         ['Norwegian', /\b(?:norwegian|nor)\b/i],
         ['Danish', /\b(?:danish|dan)\b/i],
@@ -458,7 +458,7 @@ function parseRelease(name) {
     if (atmos && info.audio && info.audio.indexOf('Atmos') === -1) info.audio += ' Atmos';
     else if (atmos && !info.audio) info.audio = 'Atmos';
 
-    var ext = text.match(/\.([a-z0-9]{2,4})$/i);
+    var ext = text.match(/\.(mkv|mp4|m4v|avi|mov|webm|ts|m2ts|m3u8|mpd|iso)$/i);
     if (ext) info.container = ext[1].toUpperCase();
 
     info.languages = detectLanguages(text);

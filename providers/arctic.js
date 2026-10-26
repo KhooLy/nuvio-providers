@@ -56,15 +56,37 @@ function fetchJson(url, timeoutMs) {
 
 function resolveImdb(tmdbId, mediaType) {
     var value = String(tmdbId || '').trim();
-    if (/^tt\d+$/i.test(value)) return Promise.resolve(value);
+    if (/^tt\d+$/i.test(value)) return Promise.resolve({ imdb: value, titles: [] });
     if (!/^\d+$/.test(value)) return Promise.reject(new Error('unsupported id'));
     var type = mediaType === 'tv' || mediaType === 'series' ? 'tv' : 'movie';
     return fetchJson('https://api.themoviedb.org/3/' + type + '/' + value + '?api_key=' + TMDB_API_KEY + '&append_to_response=external_ids', 15000)
         .then(function (data) {
             var imdb = data && data.external_ids && data.external_ids.imdb_id;
             if (!imdb) throw new Error('no imdb id');
-            return imdb;
+            var titles = [data.title || data.name, data.original_title || data.original_name].filter(function (title) {
+                return !!title;
+            });
+            return { imdb: imdb, titles: titles };
         });
+}
+
+function normalizeTitle(value) {
+    return String(value || '').toLowerCase()
+        .replace(/&/g, ' and ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function matchesTitle(stream, titles) {
+    if (!titles || !titles.length) return true;
+    var text = String(stream.description || stream.title || '');
+    var line = text.split('\n')[0] || text;
+    if (line.indexOf('🎬') === -1) return true;
+    var normalized = normalizeTitle(line);
+    return titles.some(function (title) {
+        var wanted = normalizeTitle(title);
+        return wanted && normalized.indexOf(wanted) !== -1;
+    });
 }
 
 function parseSize(stream) {
@@ -125,26 +147,29 @@ function getStreams(tmdbId, mediaType, season, episode) {
     var seasonNum = parseInt(season, 10) || 1;
     var episodeNum = parseInt(episode, 10) || 1;
 
-    return resolveImdb(tmdbId, type).then(function (imdbId) {
+    return resolveImdb(tmdbId, type).then(function (info) {
         var path = type === 'tv'
-            ? 'series/' + imdbId + ':' + seasonNum + ':' + episodeNum
-            : 'movie/' + imdbId;
+            ? 'series/' + info.imdb + ':' + seasonNum + ':' + episodeNum
+            : 'movie/' + info.imdb;
         var url = ADDON_BASE + '/' + addonConfig() + '/stream/' + path + '.json';
-        return fetchJson(url, 25000);
-    }).then(function (data) {
-        var streams = (data && data.streams) || [];
+        return fetchJson(url, 25000).then(function (data) {
+            return { data: data, titles: info.titles };
+        });
+    }).then(function (result) {
+        var streams = (result.data && result.data.streams) || [];
         var out = [];
         var seen = {};
         streams.forEach(function (stream) {
             if (!stream || !/^https?:\/\//i.test(String(stream.url || ''))) return;
             if (/support the project|donate/i.test(String(stream.name || '') + ' ' + String(stream.description || ''))) return;
+            if (!matchesTitle(stream, result.titles)) return;
             if (seen[stream.url]) return;
             seen[stream.url] = true;
             out.push(toStream(stream, type, seasonNum, episodeNum));
         });
         out.sort(function (a, b) {
-            var qa = parseInt(a.quality, 10) || 0;
-            var qb = parseInt(b.quality, 10) || 0;
+            var qa = a.quality === '4K' ? 2160 : (parseInt(a.quality, 10) || 0);
+            var qb = b.quality === '4K' ? 2160 : (parseInt(b.quality, 10) || 0);
             return qb - qa;
         });
         return out;
@@ -254,7 +279,7 @@ module.exports = { getStreams: getStreams, onSettings: onSettings };
             ['Indonesian', /\bindonesian\b/i, /\bIND\b/],
             ['Filipino', /\b(?:filipino|tagalog)\b/i, /\bFIL\b/],
             ['Dutch', /\bdutch\b/i, /\b(?:DUT|NLD)\b/],
-            ['Polish', /\bpolish\b/i, /\bPOL\b/],
+            ['Polish', /\bpolish\b/i, /\b(?:POL|PL)\b/],
             ['Swedish', /\bswedish\b/i, /\bSWE\b/],
             ['Norwegian', /\bnorwegian\b/i, /\bNOR\b/],
             ['Danish', /\bdanish\b/i, /\bDAN\b/],
@@ -290,6 +315,26 @@ module.exports = { getStreams: getStreams, onSettings: onSettings };
 
     function nuvioFlag(name) {
         return NUVIO_FLAGS[name] || '';
+    }
+
+    function nuvioLanguageFromCode(code) {
+        var names = {
+            en: 'English', eng: 'English', ko: 'Korean', kor: 'Korean', ja: 'Japanese', jpn: 'Japanese',
+            zh: 'Chinese', chi: 'Chinese', hi: 'Hindi', hin: 'Hindi', es: 'Spanish', spa: 'Spanish',
+            fr: 'French', fre: 'French', fra: 'French', de: 'German', ger: 'German', deu: 'German',
+            it: 'Italian', ita: 'Italian', pt: 'Portuguese', por: 'Portuguese', ru: 'Russian', rus: 'Russian',
+            ar: 'Arabic', ara: 'Arabic', tr: 'Turkish', tur: 'Turkish', th: 'Thai', tha: 'Thai',
+            ta: 'Tamil', tam: 'Tamil', te: 'Telugu', tel: 'Telugu', ml: 'Malayalam', mal: 'Malayalam',
+            kn: 'Kannada', kan: 'Kannada', id: 'Indonesian', ind: 'Indonesian', tl: 'Filipino', fil: 'Filipino',
+            vi: 'Vietnamese', vie: 'Vietnamese', nl: 'Dutch', dut: 'Dutch', nld: 'Dutch',
+            pl: 'Polish', pol: 'Polish', sv: 'Swedish', swe: 'Swedish', da: 'Danish', dan: 'Danish',
+            no: 'Norwegian', nor: 'Norwegian', fi: 'Finnish', fin: 'Finnish', el: 'Greek', gre: 'Greek',
+            ell: 'Greek', he: 'Hebrew', heb: 'Hebrew', uk: 'Ukrainian', ukr: 'Ukrainian',
+            cs: 'Czech', cze: 'Czech', ces: 'Czech', hu: 'Hungarian', hun: 'Hungarian',
+            ro: 'Romanian', rum: 'Romanian', ron: 'Romanian', ms: 'Malay', may: 'Malay', msa: 'Malay',
+            fa: 'Persian', per: 'Persian', fas: 'Persian'
+        };
+        return names[String(code || '').toLowerCase()] || '';
     }
 
     function nuvioLanguage(text, langs) {
@@ -372,7 +417,7 @@ module.exports = { getStreams: getStreams, onSettings: onSettings };
         else if (/\bsubs?\b/i.test(text)) info.subs = 'Sub';
         if (/\b(?:dubbed|dub)\b/i.test(text)) info.subs = info.subs ? info.subs + ' + Dub' : 'Dub';
 
-        var ext = String(text || '').match(/\.([a-z0-9]{2,4})$/i);
+        var ext = String(text || '').match(/\.(mkv|mp4|m4v|avi|mov|webm|ts|m2ts|m3u8|mpd|iso)$/i);
         if (ext) {
             var container = ext[1].toUpperCase();
             if (container === 'M3U8') container = 'HLS';
@@ -436,8 +481,25 @@ module.exports = { getStreams: getStreams, onSettings: onSettings };
         var language = info.language || (typeof stream.language === 'string' ? stream.language.trim() : '');
         var name = nuvioName(stream, provider, quality, size);
         var rich = String(stream.description || stream.title || '').trim();
-        var richLike = rich.indexOf('\n') !== -1 && (rich.indexOf('🎬') !== -1 || rich.indexOf('🎥') !== -1 || rich.indexOf('📦') !== -1 || rich.indexOf('🔊') !== -1 || rich.indexOf('🎞️') !== -1);
+        var richLike = rich.indexOf('\n') !== -1 && rich.indexOf('🎥') !== -1 && rich.indexOf('🎞️') !== -1 && (rich.indexOf('📦') !== -1 || rich.indexOf('🔊') !== -1);
         var details = richLike ? rich : nuvioDetails(info, size);
+        if (!details && !richLike) {
+            var fallback = [];
+            var typeText = String(stream.type || '') + ' ' + String(stream.url || '');
+            var container = info.container;
+            if (!container) {
+                if (/hls|m3u8/i.test(typeText)) container = 'HLS';
+                else if (/dash|mpd/i.test(typeText)) container = 'DASH';
+            }
+            if (container) fallback.push('💻 ' + container);
+            var streamLang = typeof stream.language === 'string' ? stream.language.trim() : '';
+            var langLabel = info.language || nuvioLanguageFromCode(streamLang) || streamLang;
+            if (langLabel && !(info.languages && info.languages.length)) {
+                var flag = nuvioFlag(langLabel);
+                fallback.push('🗣️ ' + (flag ? flag + ' ' : '') + langLabel);
+            }
+            details = fallback.join('\n');
+        }
         var copy = {};
         for (var key in stream) {
             if (Object.prototype.hasOwnProperty.call(stream, key)) copy[key] = stream[key];
@@ -452,7 +514,8 @@ module.exports = { getStreams: getStreams, onSettings: onSettings };
         }
         if (details) copy.size = details;
         else if (size) copy.size = size;
-        if (richLike || (info.languages && info.languages.length)) {
+        var hasLangLine = details && details.indexOf('🗣️') !== -1;
+        if (richLike || hasLangLine) {
             copy.language = '';
         } else if (language) {
             copy.language = language;
@@ -461,10 +524,45 @@ module.exports = { getStreams: getStreams, onSettings: onSettings };
         return copy;
     }
 
+    function nuvioRank(stream) {
+        var text = String(stream.quality || '') + ' ' + String(stream.name || '');
+        if (/8k|4320/.test(text)) return 4320;
+        var quality = nuvioQuality(text);
+        if (quality === '4K') return 2160;
+        if (quality === '1080p') return 1080;
+        if (quality === '720p') return 720;
+        if (quality === '480p') return 480;
+        if (quality === '360p') return 360;
+        return 0;
+    }
+
+    function nuvioMB(stream) {
+        var match = String(stream.size || '').match(/(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)/i) || String(stream.name || '').match(/(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)/i);
+        if (!match) return 0;
+        var value = parseFloat(match[1]);
+        var unit = match[2].toUpperCase();
+        if (unit === 'TB') return value * 1024 * 1024;
+        if (unit === 'GB') return value * 1024;
+        if (unit === 'MB') return value;
+        return value / 1024;
+    }
+
     function nuvioEnrichStreams(rows, provider) {
         if (!Array.isArray(rows)) return rows;
-        return rows.map(function (row) {
-            return nuvioEnrich(row, provider);
+        var indexed = rows.map(function (row, index) {
+            return { stream: nuvioEnrich(row, provider), index: index };
+        });
+        indexed.sort(function (a, b) {
+            var ra = nuvioRank(a.stream);
+            var rb = nuvioRank(b.stream);
+            if (ra !== rb) return rb - ra;
+            var sa = nuvioMB(a.stream);
+            var sb = nuvioMB(b.stream);
+            if (sa !== sb) return sb - sa;
+            return a.index - b.index;
+        });
+        return indexed.map(function (item) {
+            return item.stream;
         });
     }
 
