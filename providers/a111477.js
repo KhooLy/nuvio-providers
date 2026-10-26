@@ -412,7 +412,8 @@ function parseRelease(name) {
         hdr: '',
         audio: '',
         container: '',
-        language: ''
+        language: '',
+        languages: []
     };
 
     if (/\bremux\b/i.test(text)) info.source = /\b(?:bluray|blu-ray|bdrip|brrip|bdremux)\b/i.test(text) ? 'BluRay REMUX' : 'REMUX';
@@ -460,20 +461,48 @@ function parseRelease(name) {
     var ext = text.match(/\.([a-z0-9]{2,4})$/i);
     if (ext) info.container = ext[1].toUpperCase();
 
-    info.language = formatLanguages(text, detectLanguages(text));
+    info.languages = detectLanguages(text);
+    info.language = formatLanguages(text, info.languages);
     return info;
+}
+
+var FLAGS = {
+    English: '🇬🇧', Hindi: '🇮🇳', Korean: '🇰🇷', Japanese: '🇯🇵', Chinese: '🇨🇳',
+    Spanish: '🇪🇸', French: '🇫🇷', German: '🇩🇪', Italian: '🇮🇹', Portuguese: '🇵🇹',
+    Russian: '🇷🇺', Arabic: '🇸🇦', Turkish: '🇹🇷', Thai: '🇹🇭', Tamil: '🇮🇳',
+    Telugu: '🇮🇳', Malayalam: '🇮🇳', Kannada: '🇮🇳', Bengali: '🇧🇩', Punjabi: '🇮🇳',
+    Vietnamese: '🇻🇳', Indonesian: '🇮🇩', Filipino: '🇵🇭', Dutch: '🇳🇱', Polish: '🇵🇱',
+    Swedish: '🇸🇪', Norwegian: '🇳🇴', Danish: '🇩🇰', Finnish: '🇫🇮', Greek: '🇬🇷',
+    Hebrew: '🇮🇱', Ukrainian: '🇺🇦', Czech: '🇨🇿', Hungarian: '🇭🇺', Romanian: '🇷🇴',
+    Malay: '🇲🇾', Persian: '🇮🇷'
+};
+
+function decorateLanguages(label) {
+    var names = Object.keys(FLAGS).sort(function (a, b) { return b.length - a.length; });
+    var regex = new RegExp('\\b(' + names.join('|') + ')\\b', 'g');
+    return String(label || '').replace(regex, function (name) {
+        return FLAGS[name] ? FLAGS[name] + ' ' + name : name;
+    });
 }
 
 function toStream(entry, meta, season, episode) {
     var info = parseRelease(entry.name);
     var size = entry.sizeText || formatSize(entry.size);
-    var language = info.language || languageFromCode(meta.language);
+    var languageLine = decorateLanguages(info.language || languageFromCode(meta.language));
     var top = ['111477', info.quality, info.source, size].filter(Boolean);
-    var specs = [];
-    if (info.codec) specs.push(info.codec + (info.bitDepth ? ' ' + info.bitDepth : ''));
-    if (info.hdr) specs.push(info.hdr);
-    if (info.audio) specs.push(info.audio);
-    var details = [specs.join(' • '), [info.container, language].filter(Boolean).join(' • ')]
+    var line1 = [];
+    if (info.source) line1.push('🎥 ' + info.source);
+    if (info.codec) line1.push('🎞️ ' + info.codec);
+    if (info.bitDepth) line1.push('📺 ' + info.bitDepth);
+    if (info.hdr) line1.push('🌈 ' + info.hdr);
+    var line2 = [];
+    if (info.audio) line2.push('🔊 ' + info.audio);
+    if (size) line2.push('📦 ' + size);
+    if (info.container) line2.push('💻 ' + info.container);
+    var line3 = languageLine ? ['🗣️ ' + languageLine] : [];
+    var titleLine = '🎬 ' + (meta.title || '') + (meta.year ? ' (' + meta.year + ')' : '') +
+        (meta.type === 'tv' && season && episode ? ' • S' + String(season).padStart(2, '0') + 'E' + String(episode).padStart(2, '0') : '');
+    var details = [titleLine, line1.join(' • '), line2.join(' • '), line3.join(' • ')]
         .filter(Boolean)
         .join('\n');
     var title = entry.name;

@@ -817,12 +817,30 @@ function getStreams(tmdbId, mediaType, season, episode) {
         return out;
     }
 
+    var NUVIO_FLAGS = {
+        English: '🇬🇧', Hindi: '🇮🇳', Korean: '🇰🇷', Japanese: '🇯🇵', Chinese: '🇨🇳',
+        Spanish: '🇪🇸', French: '🇫🇷', German: '🇩🇪', Italian: '🇮🇹', Portuguese: '🇵🇹',
+        Russian: '🇷🇺', Arabic: '🇸🇦', Turkish: '🇹🇷', Thai: '🇹🇭', Tamil: '🇮🇳',
+        Telugu: '🇮🇳', Malayalam: '🇮🇳', Kannada: '🇮🇳', Bengali: '🇧🇩', Punjabi: '🇮🇳',
+        Vietnamese: '🇻🇳', Indonesian: '🇮🇩', Filipino: '🇵🇭', Dutch: '🇳🇱', Polish: '🇵🇱',
+        Swedish: '🇸🇪', Norwegian: '🇳🇴', Danish: '🇩🇰', Finnish: '🇫🇮', Greek: '🇬🇷',
+        Hebrew: '🇮🇱', Ukrainian: '🇺🇦', Czech: '🇨🇿', Hungarian: '🇭🇺', Romanian: '🇷🇴',
+        Malay: '🇲🇾', Persian: '🇮🇷'
+    };
+
+    function nuvioFlag(name) {
+        return NUVIO_FLAGS[name] || '';
+    }
+
     function nuvioLanguage(text, langs) {
         var dual = /\bdual[-. ]?audio\b/i.test(text) || /\bDUAL\b/.test(text) || (/\bdual\b/i.test(text) && langs.length >= 2);
         var multi = /\bmulti[-. ]?audio\b/i.test(text) || /\bMULTI\b/.test(text) || (/\bmulti\b/i.test(text) && langs.length >= 2);
         var prefix = dual ? 'Dual Audio' : (multi ? 'Multi-Audio' : '');
         if (langs.length > 3) return prefix || 'Multi-Audio';
-        var list = langs.slice(0, 3).join(' + ');
+        var list = langs.slice(0, 3).map(function (name) {
+            var flag = nuvioFlag(name);
+            return (flag ? flag + ' ' : '') + name;
+        }).join(' + ');
         if (prefix && list) return prefix + ' (' + list + ')';
         if (prefix) return prefix;
         return list;
@@ -844,7 +862,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
             audio: '',
             subs: '',
             container: '',
-            language: ''
+            language: '',
+            languages: []
         };
 
         if (/\bremux\b/i.test(text)) info.source = /\b(?:bluray|blu-ray|bdrip|brrip|bdremux)\b/i.test(text) ? 'BluRay REMUX' : 'REMUX';
@@ -901,7 +920,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
             info.container = container;
         }
 
-        info.language = nuvioLanguage(text, nuvioLanguages(text));
+        info.languages = nuvioLanguages(text);
+        info.language = nuvioLanguage(text, info.languages);
         return info;
     }
 
@@ -930,19 +950,20 @@ function getStreams(tmdbId, mediaType, season, episode) {
         return prefix + name;
     }
 
-    function nuvioDetails(info, size, name) {
-        var specs = [];
-        if (info.source) specs.push(info.source);
-        if (info.codec) specs.push(info.codec + (info.bitDepth ? ' ' + info.bitDepth : ''));
-        if (info.hdr) specs.push(info.hdr);
-        if (info.subs) specs.push(info.subs);
-        if (info.audio) specs.push(info.audio);
-        var line1 = specs.join(' • ');
-        var line2parts = [];
-        if (size && !nuvioHasSize(name)) line2parts.push(size);
-        if (info.container) line2parts.push(info.container);
-        var line2 = line2parts.join(' • ');
-        return [line1, line2].filter(Boolean).join('\n');
+    function nuvioDetails(info, size) {
+        var line1 = [];
+        if (info.source) line1.push('🎥 ' + info.source);
+        if (info.codec) line1.push('🎞️ ' + info.codec);
+        if (info.bitDepth) line1.push('📺 ' + info.bitDepth);
+        if (info.hdr) line1.push('🌈 ' + info.hdr);
+        if (info.subs) line1.push('💬 ' + info.subs);
+        var line2 = [];
+        if (info.audio) line2.push('🔊 ' + info.audio);
+        if (size) line2.push('📦 ' + size);
+        if (info.container) line2.push('💻 ' + info.container);
+        var line3 = [];
+        if (info.languages && info.languages.length) line3.push('🗣️ ' + info.language);
+        return [line1.join(' • '), line2.join(' • '), line3.join(' • ')].filter(Boolean).join('\n');
     }
 
     function nuvioEnrich(stream, provider) {
@@ -954,17 +975,28 @@ function getStreams(tmdbId, mediaType, season, episode) {
         if (quality === 'HD' && stream.quality) quality = nuvioQuality(stream.quality);
         var language = info.language || (typeof stream.language === 'string' ? stream.language.trim() : '');
         var name = nuvioName(stream, provider, quality, size);
-        var details = nuvioDetails(info, size, name);
+        var rich = String(stream.description || stream.title || '').trim();
+        var richLike = rich.indexOf('\n') !== -1 && (rich.indexOf('🎬') !== -1 || rich.indexOf('🎥') !== -1 || rich.indexOf('📦') !== -1 || rich.indexOf('🔊') !== -1 || rich.indexOf('🎞️') !== -1);
+        var details = richLike ? rich : nuvioDetails(info, size);
         var copy = {};
         for (var key in stream) {
             if (Object.prototype.hasOwnProperty.call(stream, key)) copy[key] = stream[key];
         }
         copy.name = name;
-        if (quality && quality !== 'HD') copy.quality = quality;
-        else if (!copy.quality) copy.quality = quality;
+        if (richLike) {
+            copy.quality = '';
+        } else if (quality && quality !== 'HD') {
+            copy.quality = quality;
+        } else if (!copy.quality) {
+            copy.quality = quality;
+        }
         if (details) copy.size = details;
         else if (size) copy.size = size;
-        if (language) copy.language = language;
+        if (richLike || (info.languages && info.languages.length)) {
+            copy.language = '';
+        } else if (language) {
+            copy.language = language;
+        }
         copy._nuvioFormatted = true;
         return copy;
     }
