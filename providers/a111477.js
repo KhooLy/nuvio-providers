@@ -149,13 +149,13 @@ function parseJina(text, section) {
         if (!line) continue;
         if (/^(Title|URL Source|Markdown Content):/i.test(line)) continue;
         if (/parent directory|back to index/i.test(line)) continue;
-        var linkMatch = line.match(/^\[(.+?)\]\((https?:\/\/[^)\s]+)\)/);
+        var linkMatch = line.match(/\[(.+?)\]\((https?:\/\/[^)\s]+)\)/);
         if (linkMatch) {
             var linkedName = linkMatch[1].replace(/\/$/, '').trim();
             if (linkedName === '..' || !linkedName || /^←/.test(linkedName)) continue;
             var linkedUrl = linkMatch[2];
             var linkedPath = linkedUrl.indexOf(BASE) === 0 ? linkedUrl.slice(BASE.length) : linkedUrl.replace(/^https?:\/\/[^/]+/, '');
-            if (linkedPath.indexOf(section) !== 0) continue;
+            if (canonicalPath(linkedPath).indexOf(canonicalPath(section)) !== 0) continue;
             var isDir = /\/$/.test(linkMatch[1]) || /\/$/.test(linkedUrl);
             var sizeMatch = line.slice(linkMatch[0].length).match(/([\d.]+)\s*(B|KB|MB|GB|TB)\b/i);
             out.push({
@@ -280,7 +280,7 @@ function getEntries(path) {
             return [];
         });
     }
-    return fetchText(BASE + path, 25000).then(function (res) {
+    return fetchText(BASE + path, 4000).then(function (res) {
         if (res.ok) {
             var entries = parseRows(res.body);
             if (entries.length) return entries;
@@ -552,6 +552,17 @@ function episodeMatches(name, season, episode) {
     return false;
 }
 
+function yearMatchesFile(name, year) {
+    if (!year) return true;
+    var years = String(name || '').match(/\((?:19|20)\d{2}\)/g);
+    if (!years || !years.length) return true;
+    var wanted = parseInt(year, 10);
+    return years.some(function (value) {
+        var parsed = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+        return Math.abs(parsed - wanted) <= 1;
+    });
+}
+
 function isJunkDir(name) {
     return /\b(extras?|featurettes?|samples?|trailers?|subtitles?|subs?|proof|screens?)\b/i.test(name);
 }
@@ -596,7 +607,7 @@ function collectFiles(path, depth, meta, season, episode, seen, root) {
         }).slice(0, 2);
         var files = videoEntries(entries);
         var matching = files.filter(function (entry) {
-            return episodeMatches(entry.name, season, episode);
+            return episodeMatches(entry.name, season, episode) && yearMatchesFile(entry.name, meta.year);
         });
         if (matching.length) return matching;
         if (seasonDirs.length) {
@@ -663,11 +674,11 @@ function directTvPaths(meta) {
     var paths = [];
     [meta.title, meta.original].forEach(function (title) {
         if (!title) return;
+        paths.push('/tvs/' + encodeURIComponent(title) + '/');
         if (meta.year) paths.push('/tvs/' + encodeURIComponent(title + ' (' + meta.year + ')') + '/');
         meta.countries.forEach(function (code) {
             paths.push('/tvs/' + encodeURIComponent(title + ' (' + code + ')') + '/');
         });
-        paths.push('/tvs/' + encodeURIComponent(title) + '/');
     });
     return unique(paths);
 }
