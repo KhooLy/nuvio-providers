@@ -38,12 +38,17 @@ function sign(method, path, ts, nc, body) {
 }
 
 function decryptOnce(input) {
-    const parts = String(input).trim().split(':');
-    if (parts.length < 2) return null;
-    const iv = Buffer.from(parts[1], 'base64');
-    const data = Buffer.from(parts[0], 'base64');
-    const d = crypto.createDecipheriv('aes-128-cbc', AES_KEY, iv);
-    return Buffer.concat([d.update(data), d.final()]).toString('utf8');
+    try {
+        const parts = String(input).trim().split(':');
+        if (parts.length < 2) return null;
+        const iv = Buffer.from(parts[1], 'base64');
+        const data = Buffer.from(parts[0], 'base64');
+        if (iv.length !== 16) return null;
+        const d = crypto.createDecipheriv('aes-128-cbc', AES_KEY, iv);
+        return Buffer.concat([d.update(data), d.final()]).toString('utf8');
+    } catch (e) {
+        return null;
+    }
 }
 
 function decryptTwice(input) {
