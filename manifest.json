@@ -727,7 +727,7 @@
       ],
       "filename": "providers/a111477.js",
       "enabled": true,
-      "hasSettings": false,
+      "hasSettings": true,
       "formats": [
         "mkv",
         "mp4",
