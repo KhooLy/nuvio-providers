@@ -34,6 +34,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
 | **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |
 | **SoloLatino** | `sololatino` | Movies & Series | ES/LA HLS | `sololatino.net` |
+| **111477** | `111477` | Movies & Series (incl. KDrama / Asian drama) | Direct MKV/MP4, multi-audio | `a.111477.xyz` |
 
 ---
 
@@ -94,9 +95,16 @@ node -e 'require("./providers/dizipal.js").getStreams("27205", "movie").then(con
 
 # Test DiziBOX
 node -e 'require("./providers/dizibox.js").getStreams("196322", "tv", 2, 8).then(console.log)'
+
+# Test 111477
+node -e 'require("./providers/a111477.js").getStreams("27205", "movie").then(console.log)'
+node -e 'require("./providers/a111477.js").getStreams("1396", "tv", 1, 1).then(console.log)'
+node -e 'require("./providers/a111477.js").getStreams("81821", "tv", 1, 1).then(console.log)'
 ```
 
 > **Note:** Vidlove movie streams are currently dead upstream (all sources return null for the movie endpoint); TV works. The API also has intermittent null-windows, so `providers/vidlove.js` and `tools/*.js` retry periodically.
+
+> **Note:** 111477 file links redirect through `p.111477.xyz`, which is protected by a Cloudflare browser check. The provider resolves the correct files, but in-app playback depends on the player being able to pass that check.
 
 ### Sprite Sheets
 

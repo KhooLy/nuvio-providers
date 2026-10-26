@@ -636,6 +636,34 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "111477",
+      "name": "111477",
+      "description": "Direct MKV/MP4 streams from the 111477 media index (movies, series, KDrama and Asian drama)",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/a111477.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "mkv",
+        "mp4",
+        "avi"
+      ],
+      "contentLanguage": [
+        "en",
+        "ko",
+        "zh",
+        "ja",
+        "hi"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }
