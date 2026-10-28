@@ -31,3 +31,5 @@ for (const file of fs.readdirSync(providersDir).sort()) {
     fs.writeFileSync(filePath, code.replace(/\s+$/, '') + '\n\n' + block);
     console.log('formatted ' + file);
 }
+
+require('./apply-imdb');

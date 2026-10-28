@@ -39,12 +39,15 @@ function search(title) {
   }).catch(siteSearch);
 }
 function matches(post, meta, type) {
-  var title = String(post.t || '');
-  var prefix = title.split(/\((?:19|20)\d{2}\)|\(Season\s|\bSeason\s\d|\bS\d{1,2}\b/i)[0];
-  var names = [meta.title || meta.name, meta.originalTitle].filter(Boolean).map(normalize);
-  if (names.indexOf(normalize(prefix)) < 0) return false;
-  var year = title.match(/\((\d{4})\)/);
-  return type !== 'movie' || !meta.year || !year || String(meta.year) === year[1];
+  var title = normalize(post.t);
+  if (!title) return false;
+  var names = [meta.title || meta.name, meta.originalTitle].filter(Boolean).map(normalize).filter(Boolean);
+  var hit = names.some(function (name) { return title === name || title.indexOf(name + ' ') === 0; });
+  if (!hit) return false;
+  if (type !== 'movie' || !meta.year) return true;
+  var year = String(meta.year);
+  if (new RegExp('(^|\\s)' + year + '(\\s|$)').test(title)) return true;
+  return !/\b(?:19|20)\d{2}\b/.test(title);
 }
 function constant(html, name) {
   var m = html.match(new RegExp('(?:const|let|var)\\s+' + name + '\\s*=\\s*("(?:[^"\\\\]|\\\\.)*")\\s*;'));
@@ -70,30 +73,35 @@ function selectSources(data, type, season, episode) {
   return sources;
 }
 function parseCinecloudFallback(html, type, season, episode) {
-  var rows = [];
-  var seen = {};
-  var wanted = type === 'tv' ? 'es' + String(Number(season)).padStart(2, '0') + 'e' + String(Number(episode)).padStart(2, '0') : '';
-  var parts = type === 'tv' ? html.split('class="cft-it"') : html.split('class="download-links-div"');
-  if (!parts.length) parts = [html];
-  parts.forEach(function (part) {
-    var keyMatch = part.match(/^[^>]*data-k="([^"]+)"/);
-    if (type === 'tv' && (!keyMatch || keyMatch[1].toLowerCase() !== wanted)) return;
-    var quality = part.match(/\b(2160|1080|720|480|360)p\b/i);
-    var qualityLabel = quality ? quality[1] + 'p' : 'HD';
-    var hrefRe = /href="(https:\/\/[^"]*cinecloud\.[^"]*\/f\/[^"]+)"/g;
-    var m;
-    while ((m = hrefRe.exec(part)) !== null) {
-      var url = m[1];
-      if (seen[url]) continue;
-      seen[url] = true;
-      rows.push({
-        name: 'Cinefreak',
-        title: 'Cinefreak • ' + qualityLabel + (type === 'tv' ? ' • S' + String(season).padStart(2, '0') + 'E' + String(episode).padStart(2, '0') : ''),
-        quality: qualityLabel,
-        url: url,
-        type: 'embed'
-      });
+  var rows = [], seen = {};
+  var chunks = type === 'tv'
+    ? html.split(/<div[^>]*class="[^"]*cft-it[^"]*"/i).slice(1)
+    : html.split(/<h4[^>]*class="[^"]*movie-title[^"]*"[^>]*>/i).slice(1);
+  chunks.forEach(function (chunk) {
+    if (type === 'tv') {
+      var key = (chunk.match(/^\s*[^>]*data-k="([^"]+)"/i) || [])[1] || '';
+      var range = /^(?:es|ps)(\d{2})e(\d{2})(?:-(\d{2}))?$/i.exec(key);
+      if (!range) return;
+      if (Number(range[1]) !== Number(season)) return;
+      var first = Number(range[2]);
+      var last = range[3] ? Number(range[3]) : first;
+      if (Number(episode) < first || Number(episode) > last) return;
     }
+    var pack = (chunk.match(/<div[^>]*class="[^"]*cft-info[^"]*"[^>]*>\s*<b[^>]*>([\s\S]*?)<\/b>/i) || [])[1] || '';
+    pack = pack.replace(/<[^>]+>/g, '').trim();
+    var tags = chunk.match(/<a\b[^>]*>/gi) || [];
+    tags.forEach(function (tag) {
+      var href = (tag.match(/href="([^"]+)"/i) || [])[1];
+      if (!href || !/^https:\/\/[^"]*cinecloud\.[^"]*\/f\//i.test(href) || seen[href]) return;
+      seen[href] = true;
+      var aria = (tag.match(/aria-label="([^"]*)"/i) || [])[1] || '';
+      var qm = /(\d{3,4})p/i.exec(aria) || /(2160|1080|720|480|360)p/i.exec(chunk);
+      var quality = /watch/i.test(aria) ? 'auto' : (qm ? qm[1] + 'p' : 'HD');
+      var title = 'Cinefreak • ' + quality;
+      if (type === 'tv') title += ' • S' + String(season).padStart(2, '0') + 'E' + String(episode).padStart(2, '0');
+      if (pack && type === 'tv' && /episode/i.test(pack)) title += ' • ' + pack;
+      rows.push({ name: 'Cinefreak', title: title, quality: quality, url: href, type: 'embed' });
+    });
   });
   return rows;
 }
@@ -544,4 +552,224 @@ if (typeof globalThis !== 'undefined') { globalThis.getStreams = getStreams; glo
             };
         }
     } catch (e) {}
+})();
+
+(function nuvioImdbBootstrap() {
+    var keys = [];
+    try { if (typeof TMDB_API_KEY !== "undefined" && TMDB_API_KEY) keys.push(TMDB_API_KEY); } catch (e) {}
+    try { if (typeof TMDB_KEY !== "undefined" && TMDB_KEY) keys.push(TMDB_KEY); } catch (e) {}
+    try { if (typeof tmdbApiKey !== "undefined" && tmdbApiKey) keys.push(tmdbApiKey); } catch (e) {}
+    ["1865f43a0549ca50d341dd9ab8b29f49", "439c478a771f35c05022f9feabcca01c", "6dc830f9624b43261325bed3bf7d0dfa", "5f39fd16e987a9e3fce30d55cf09b438"].forEach(function (key) {
+        if (keys.indexOf(key) === -1) keys.push(key);
+    });
+
+    function tmdbJson(url) {
+        return fetch(url).then(function (res) {
+            return res && res.ok && res.json ? res.json() : null;
+        }).catch(function () { return null; });
+    }
+
+    function tmdbFind(imdb, type) {
+        var index = 0;
+        function attempt() {
+            if (index >= keys.length) return Promise.resolve(null);
+            var url = "https://api.themoviedb.org/3/find/" + encodeURIComponent(imdb) +
+                "?api_key=" + encodeURIComponent(keys[index++]) + "&external_source=imdb_id";
+            return tmdbJson(url).then(function (data) {
+                if (!data) return attempt();
+                var rows = type === "tv" ? data.tv_results : data.movie_results;
+                return rows && rows[0] && rows[0].id ? String(rows[0].id) : null;
+            });
+        }
+        return attempt();
+    }
+
+    function wrap(fn) {
+        if (typeof fn !== "function" || fn.__nuvioImdbWrapped) return fn;
+        function wrapped(id, mediaType, season, episode) {
+            var value = String(id == null ? "" : id).trim();
+            if (!/^tt\d+$/i.test(value) || typeof fetch !== "function") return fn.apply(this, arguments);
+            var type = /^(tv|series|show|anime|tvshow|tv_show)$/i.test(String(mediaType || "")) ? "tv" : "movie";
+            var self = this;
+            return tmdbFind(value, type).then(function (tmdbId) {
+                return tmdbId ? fn.call(self, tmdbId, mediaType, season, episode) : [];
+            });
+        }
+        wrapped.__nuvioImdbWrapped = true;
+        return wrapped;
+    }
+
+    if (typeof module !== "undefined" && module.exports && typeof module.exports.getStreams === "function") {
+        module.exports.getStreams = wrap(module.exports.getStreams);
+    }
+    if (typeof globalThis !== "undefined" && typeof globalThis.getStreams === "function") {
+        globalThis.getStreams = wrap(globalThis.getStreams);
+    }
+    if (typeof window !== "undefined" && typeof window.getStreams === "function") {
+        window.getStreams = wrap(window.getStreams);
+    }
+})();
+
+(function nuvioLivenessBootstrap() {
+    var CONCURRENCY = 6;
+    var PROBE_TIMEOUT = 3000;
+    var BUDGET = 6000;
+    var DEAD_STATUS = { 404: 1, 410: 1, 451: 1 };
+    var MEDIA_URL = /\.(?:m3u8|mpd|mp4|mkv|m4v|webm|ts|m2ts|avi|mov)(?:$|[?#])/i;
+
+    function isHttp(url) {
+        return /^https?:\/\//i.test(String(url || ""));
+    }
+
+    function isLocal(url) {
+        return /^https?:\/\/(?:localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/i.test(String(url || ""));
+    }
+
+    function streamHeaders(stream) {
+        var out = {};
+        var source = stream && (stream.headers ||
+            (stream.behaviorHints && stream.behaviorHints.proxyHeaders && stream.behaviorHints.proxyHeaders.request) ||
+            (stream.proxyHeaders && stream.proxyHeaders.request));
+        if (source && typeof source === "object" && !Array.isArray(source)) {
+            for (var key in source) {
+                if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+                var value = source[key];
+                if (typeof value === "string" && value.trim()) out[key] = value;
+            }
+        }
+        if (!out["User-Agent"] && !out["user-agent"]) {
+            out["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+        }
+        return out;
+    }
+
+    function request(url, headers, method) {
+        if (typeof fetch !== "function") return Promise.resolve(0);
+        var copy = {};
+        for (var name in headers) {
+            if (Object.prototype.hasOwnProperty.call(headers, name)) copy[name] = headers[name];
+        }
+        if (method === "GET") copy.Range = "bytes=0-1";
+        var opts = { method: method, headers: copy, redirect: "follow" };
+        var controller = null;
+        var timer = null;
+        try {
+            if (typeof AbortController === "function") {
+                controller = new AbortController();
+                opts.signal = controller.signal;
+            }
+        } catch (e) {}
+        if (controller && typeof setTimeout === "function") {
+            timer = setTimeout(function () { try { controller.abort(); } catch (e) {} }, PROBE_TIMEOUT);
+        }
+        return fetch(url, opts).then(function (res) {
+            if (timer) clearTimeout(timer);
+            if (method === "GET" && res && res.body && typeof res.body.cancel === "function") {
+                try {
+                    var cancelled = res.body.cancel();
+                    if (cancelled && typeof cancelled.catch === "function") cancelled.catch(function () {});
+                } catch (e) {}
+            }
+            return res ? Number(res.status) || 0 : 0;
+        }).catch(function () {
+            if (timer) clearTimeout(timer);
+            return 0;
+        });
+    }
+
+    function verdict(status, url) {
+        if (!status) return "unknown";
+        if (status >= 200 && status < 400) return "live";
+        if (DEAD_STATUS[status]) return "dead";
+        if ((status === 401 || status === 403) && MEDIA_URL.test(String(url || ""))) return "dead";
+        return "unknown";
+    }
+
+    function probe(stream) {
+        var url = String(stream && stream.url || "");
+        if (!isHttp(url) || isLocal(url)) return Promise.resolve("unknown");
+        var headers = streamHeaders(stream);
+        return request(url, headers, "HEAD").then(function (headStatus) {
+            if (verdict(headStatus, url) === "live") return "live";
+            return request(url, headers, "GET").then(function (getStatus) {
+                if (verdict(getStatus, url) === "live") return "live";
+                if (verdict(headStatus, url) === "dead" || verdict(getStatus, url) === "dead") return "dead";
+                if (!headStatus && !getStatus) return "unknown";
+                return "unknown";
+            });
+        });
+    }
+
+    function filterRows(rows) {
+        if (!Array.isArray(rows) || !rows.length) return Promise.resolve(rows);
+        var verdicts = new Array(rows.length);
+        var cache = {};
+        var next = 0;
+        var active = 0;
+        var done = 0;
+        var finished = false;
+        var timer = null;
+
+        return new Promise(function (resolve) {
+            function finish() {
+                if (finished) return;
+                finished = true;
+                if (timer) clearTimeout(timer);
+                var out = [];
+                for (var i = 0; i < rows.length; i++) {
+                    if (verdicts[i] !== "dead") out.push(rows[i]);
+                }
+                resolve(out);
+            }
+            if (typeof setTimeout === "function") timer = setTimeout(finish, BUDGET);
+            function launch() {
+                while (active < CONCURRENCY && next < rows.length) {
+                    (function (index) {
+                        var row = rows[index];
+                        var key = String(row && row.url || "");
+                        if (!cache[key]) {
+                            try { cache[key] = probe(row); } catch (e) { cache[key] = Promise.resolve("unknown"); }
+                        }
+                        active++;
+                        cache[key].then(function (value) {
+                            verdicts[index] = value;
+                        }, function () {
+                            verdicts[index] = "unknown";
+                        }).then(function () {
+                            active--;
+                            done++;
+                            if (done >= rows.length) finish();
+                            else launch();
+                        });
+                    })(next++);
+                }
+            }
+            launch();
+        });
+    }
+
+    function wrap(fn) {
+        if (typeof fn !== "function" || fn.__nuvioLivenessWrapped) return fn;
+        function wrapped() {
+            var self = this;
+            var args = arguments;
+            var result;
+            try { result = fn.apply(self, args); } catch (e) { return Promise.resolve([]); }
+            return Promise.resolve(result).then(function (rows) {
+                return filterRows(rows);
+            }, function () { return []; });
+        }
+        wrapped.__nuvioLivenessWrapped = true;
+        return wrapped;
+    }
+
+    if (typeof module !== "undefined" && module.exports && typeof module.exports.getStreams === "function") {
+        module.exports.getStreams = wrap(module.exports.getStreams);
+    }
+    if (typeof globalThis !== "undefined" && typeof globalThis.getStreams === "function") {
+        globalThis.getStreams = wrap(globalThis.getStreams);
+    }
+    if (typeof window !== "undefined" && typeof window.getStreams === "function") {
+        window.getStreams = wrap(window.getStreams);
+    }
 })();

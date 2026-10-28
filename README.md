@@ -65,12 +65,16 @@ The server will be available at:
 ├── tools/
 │   ├── apply-formatters.js  # Injects the shared stream formatter into providers
 │   ├── formatter.template.js # Rich source/codec/HDR/audio/container labels
+│   ├── apply-imdb.js        # Injects the IMDb→TMDB id resolver into providers
+│   ├── imdb.template.js     # Wraps getStreams so tt ids resolve before scraping
+│   ├── apply-liveness.js    # Injects the dead-link filter into providers
+│   ├── liveness.template.js # HEAD/Range probes streams and drops 4xx/dead urls
 │   ├── thumbnail.js         # Retry-based single-frame grabber for vidlove streams
 │   └── sprite.js            # Progressive tiered sprite sheet + preview.vtt generator
 └── README.md
 ```
 
-> Provider files are standalone, so the shared rich-label formatter is injected into each one with `node tools/apply-formatters.js`.
+> Provider files are standalone, so the shared rich-label formatter is injected into each one with `node tools/apply-formatters.js`. The same run also injects the IMDb→TMDB resolver and the dead-link filter, so `tt...` ids work anywhere a numeric TMDB id does and 401/403/404/410/451 streams are dropped before returning.
 
 ---
 
@@ -83,7 +87,7 @@ You can test individual providers using Node.js:
 node -e 'require("./providers/hdfilmizle.js").getStreams("tt0760437", "tv", 1, 1).then(console.log)'
 
 # Test Hianime
-node -e 'require("./providers/hianime.js").getStreams("154587", "tv", 1, 1).then(console.log)'
+node -e 'require("./providers/hianime.js").getStreams("37854", "tv", 1, 1).then(console.log)'
 
 # Test Anikoto
 node -e 'require("./providers/anikoto.js").getStreams("115994", "tv", 1, 43).then(console.log)'
