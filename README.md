@@ -23,6 +23,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **VaPlayer** | `vaplayer` | Movies & Series | HLS | `vaplayer.ru` |
 | **Miruro** | `miruro` | Anime Series | SUB + subtitles | `miruro.to` |
 | **VidLink** | `vidlink` | Movies & Series | HLS + subtitles | `vidlink.pro` |
+| **Cinezo** | `cinezo` | Movies & Series | HLS/MP4 (5 backends) | `punkflix.net`, `flikhub.net` |
 | **2Peckle** | `2peckle` | Movies & Series | Direct MP4 | Pengu addon |
 | **ToonWorld4All** | `toonworld4all` | Animated Movies & Series | EN / HI direct links | `toonworld4all.me` |
 | **Ani.pm** | `anipm` | Anime Series | HLS & embeds | `ani.pm` |

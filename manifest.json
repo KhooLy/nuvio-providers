@@ -316,6 +316,29 @@
       "supportsExternalPlayer": true
     },
     {
+      "id": "cinezo",
+      "name": "Cinezo",
+      "description": "Movies and series via Cinezo's Zendaya, Jennifer, Berlin, Scarlet and Sadie backends",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/cinezo.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
       "id": "2peckle",
       "name": "2Peckle",
       "description": "Movies and series via 2Peckle with direct MP4 streams",
