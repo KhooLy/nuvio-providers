@@ -40,6 +40,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **SoloLatino** | `sololatino` | Movies & Series | ES/LA HLS | `sololatino.net` |
 | **111477** | `111477` | Movies & Series (incl. KDrama / Asian drama) | Direct MKV/MP4, multi-audio | `a.111477.xyz` |
 | **1Shows** | `oneshows` | Movies & Series | HLS via Vidy / VidFast / VidLink / VidRock, multi-language subs | `1shows.org` |
+| **321Movies** | `321movies` | Movies & Series | Adaptive HLS via the VixSrc backend, multi-audio & subs | `vixsrc.to` |
 
 ---
 
@@ -117,6 +118,10 @@ node -e 'require("./providers/a111477.js").getStreams("81821", "tv", 1, 1).then(
 # Test 1Shows
 node -e 'require("./providers/oneshows.js").getStreams("27205", "movie").then(console.log)'
 node -e 'require("./providers/oneshows.js").getStreams("1399", "tv", 1, 1).then(console.log)'
+
+# Test 321Movies
+node -e 'require("./providers/321movies.js").getStreams("27205", "movie").then(console.log)'
+node -e 'require("./providers/321movies.js").getStreams("1399", "tv", 1, 1).then(console.log)'
 ```
 
 > **Note:** Vidlove moved from `vidlove.cc` to `vidlove.st` on 2026-10-29; the old domain's nameservers now refuse queries and the new one had no A records at the time of writing. `providers/vidlove.js` probes `api.vidlove.st` first and falls back to `api.vidlove.cc`, so it resumes automatically once either host answers.

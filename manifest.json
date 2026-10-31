@@ -800,6 +800,40 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "321movies",
+      "name": "321Movies",
+      "description": "HLS streams from the VixSrc backend used by 321movies.co.uk, with multi-language subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/321movies.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en",
+        "it",
+        "es",
+        "fr",
+        "de",
+        "pt",
+        "tr",
+        "hi",
+        "ar",
+        "ru",
+        "ja",
+        "ko",
+        "zh"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }
