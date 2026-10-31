@@ -1,10 +1,43 @@
-var ENDPOINT = "https://api.vidlove.cc";
+var ENDPOINT = null;
+var ENDPOINT_CANDIDATES = [
+    "https://api.vidlove.st",
+    "https://api.vidlove.cc"
+];
+var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
-var HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    "Referer":    "https://player.vidlove.cc/",
-    "Origin":     "https://player.vidlove.cc"
-};
+function headersFor(endpoint) {
+    var player = String(endpoint || "").replace("://api.", "://player.");
+    return {
+        "User-Agent": USER_AGENT,
+        "Referer": player + "/",
+        "Origin": player
+    };
+}
+
+function probeEndpoint(endpoint) {
+    return fetch(endpoint + "/movie?id=550&mode=json", { headers: headersFor(endpoint) })
+        .then(function(r) { return r.ok || r.status < 500; })
+        .catch(function() { return false; });
+}
+
+function resolveEndpoint() {
+    if (ENDPOINT) return Promise.resolve(ENDPOINT);
+    var i = 0;
+    function next() {
+        if (i >= ENDPOINT_CANDIDATES.length) {
+            ENDPOINT = ENDPOINT_CANDIDATES[0];
+            return Promise.resolve(ENDPOINT);
+        }
+        var endpoint = ENDPOINT_CANDIDATES[i++];
+        return probeEndpoint(endpoint).then(function(ok) {
+            if (!ok) return next();
+            ENDPOINT = endpoint;
+            console.log("[VID][INIT] ENDPOINT=" + endpoint);
+            return endpoint;
+        }, next);
+    }
+    return next();
+}
 
 var SOURCES = [
     { key: "moviebox2", label: "MovieBox 2" },
@@ -22,7 +55,7 @@ function buildUrl(base, src) {
 }
 
 function fetchJson(url) {
-    return fetch(url, { headers: HEADERS })
+    return fetch(url, { headers: headersFor(ENDPOINT) })
         .then(function(r) {
             return r.text().then(function(body) {
                 if (!r.ok) {
@@ -118,6 +151,12 @@ function toSubtitles(tracks) {
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
+    return resolveEndpoint().then(function() {
+        return collectStreams(tmdbId, mediaType, season, episode);
+    });
+}
+
+function collectStreams(tmdbId, mediaType, season, episode) {
     var isTv = (mediaType === "tv" || mediaType === "series");
     var base = isTv
         ? ENDPOINT + "/tv?id=" + tmdbId + "&season=" + season + "&episode=" + episode + "&mode=json"

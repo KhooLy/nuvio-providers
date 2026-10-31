@@ -6,7 +6,7 @@ var execFile = require("child_process").execFile;
 var provider = require(path.join(__dirname, "..", "providers", "vidlove.js"));
 
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
-var REFERER = "https://player.vidlove.cc/";
+var REFERER = "https://player.vidlove.st/";
 var W = parseInt(process.env.W || "24", 10);
 var RETRY_MS = parseInt(process.env.RETRY_MS || "45000", 10);
 var MAX_TRIES = parseInt(process.env.MAX_TRIES || "10", 10);

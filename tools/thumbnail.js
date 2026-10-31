@@ -22,7 +22,7 @@ var seek = args[5] || "300";
 var maxTries = parseInt(args[6] || "10", 10);
 
 function lowestVariantUrl(masterUrl) {
-    var headers = { "User-Agent": UA, "Referer": "https://player.vidlove.cc/" };
+    var headers = { "User-Agent": UA, "Referer": "https://player.vidlove.st/" };
     return fetch(masterUrl, { headers: headers })
         .then(function(r) { return r.text(); })
         .then(function(m) {
@@ -56,7 +56,7 @@ function runFfmpeg(streamUrl) {
         execFile("ffmpeg", [
             "-y", "-hide_banner", "-loglevel", "error",
             "-user_agent", UA,
-            "-headers", "Referer: https://player.vidlove.cc/\r\n",
+            "-headers", "Referer: https://player.vidlove.st/\r\n",
             "-allowed_segment_extensions", "ALL",
             "-extension_picky", "0",
             "-ss", String(seek),

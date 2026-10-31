@@ -12,7 +12,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **HDFilmizle** | `hdfilmizle` | Movies & Series | TR / EN Audio, EN Subtitles | `hdfilmizle.vip` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
 | **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
-| **Vidlove** | `vidlove` | Movies & Series | HLS | `vidlove.cc` |
+| **Vidlove** | `vidlove` | Movies & Series | HLS | `vidlove.st` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
 | **SezonlukDizi** | `sezonlukdizi` | Turkish Series | TR Dublaj/Altyazı HLS | `sezonlukdizi.cc` |
@@ -113,7 +113,7 @@ node -e 'require("./providers/a111477.js").getStreams("1396", "tv", 1, 1).then(c
 node -e 'require("./providers/a111477.js").getStreams("81821", "tv", 1, 1).then(console.log)'
 ```
 
-> **Note:** Vidlove movie streams are currently dead upstream (all sources return null for the movie endpoint); TV works. The API also has intermittent null-windows, so `providers/vidlove.js` and `tools/*.js` retry periodically.
+> **Note:** Vidlove moved from `vidlove.cc` to `vidlove.st` on 2026-10-29; the old domain's nameservers now refuse queries and the new one had no A records at the time of writing. `providers/vidlove.js` probes `api.vidlove.st` first and falls back to `api.vidlove.cc`, so it resumes automatically once either host answers.
 
 > **Note:** 111477 file links redirect through `p.111477.xyz`, which is protected by a Cloudflare browser check. The provider resolves the correct files, but in-app playback depends on the player being able to pass that check.
 
