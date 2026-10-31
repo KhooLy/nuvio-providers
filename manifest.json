@@ -765,6 +765,41 @@
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
+    },
+    {
+      "id": "oneshows",
+      "name": "1Shows",
+      "description": "Multi-server HLS streams from 1shows.org (Vidy, VidFast, VidLink, VidRock) with multi-language subtitles",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/oneshows.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "ta",
+        "te",
+        "ko",
+        "ja",
+        "zh",
+        "es",
+        "fr",
+        "de",
+        "pt",
+        "ar",
+        "tr"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
     }
   ]
 }
