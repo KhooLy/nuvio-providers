@@ -873,7 +873,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
                         var sorted = list.slice().sort(function (a, b) {
                             return hostPriority(a && a.baslik) - hostPriority(b && b.baslik);
                         });
-                        for (var i = 0; i < sorted.length && i < perLang; i++) {
+                        var filemoon = sorted.filter(function (item) {
+                            return item && hostPriority(item.baslik) === 0;
+                        });
+                        if (filemoon.length) sorted = filemoon;
+                        var limit = filemoon.length ? 2 : perLang;
+                        for (var i = 0; i < sorted.length && i < limit; i++) {
                             var item = sorted[i];
                             if (!item || !item.id || seen[item.id]) continue;
                             seen[item.id] = true;
