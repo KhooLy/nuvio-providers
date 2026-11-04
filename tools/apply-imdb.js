@@ -8,7 +8,6 @@ const template = fs.readFileSync(path.join(__dirname, 'imdb.template.js'), 'utf8
 const skip = new Set([
     '2peckle.js',
     'anikoto.js',
-    'hdfilmizle.js',
     'hianime.js',
     'vidy.js'
 ]);

@@ -8,7 +8,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | :--- | :--- | :--- | :--- | :--- |
 | **Cinefreak** | `cinefreak` | Movies & Series | EN / HI, direct links | `cinefreak.net` |
 | **Vidy** | `vidy` | Movies & Series | HLS up to 4K, multi-audio | `vidy.st` |
-| **HDFilmizle** | `hdfilmizle` | Movies & Series | TR / EN Audio, EN Subtitles | `hdfilmizle.vip` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
 | **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
@@ -43,7 +42,6 @@ node server.js
 
 The server will be available at:
 - **Manifest URL:** `http://localhost:3000/manifest.json`
-- **HDFilmizle Provider:** `http://localhost:3000/providers/hdfilmizle.js`
 - **Hianime Provider:** `http://localhost:3000/providers/hianime.js`
 
 ---
@@ -73,9 +71,6 @@ The server will be available at:
 You can test individual providers using Node.js:
 
 ```bash
-# Test HDFilmizle
-node -e 'require("./providers/hdfilmizle.js").getStreams("tt0760437", "tv", 1, 1).then(console.log)'
-
 # Test Hianime
 node -e 'require("./providers/hianime.js").getStreams("37854", "tv", 1, 1).then(console.log)'
 

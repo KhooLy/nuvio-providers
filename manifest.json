@@ -3,31 +3,6 @@
   "version": "1.0.0",
   "scrapers": [
     {
-      "id": "hdfilmizle",
-      "name": "HDFilmizle",
-      "description": "Direct m3u8 streams, Turkish/English audio tracks, and English subtitles from hdfilmizle.vip",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/hdfilmizle.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8",
-        "mp4",
-        "mkv"
-      ],
-      "contentLanguage": [
-        "tr",
-        "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
       "id": "hianime",
       "name": "Hianime",
       "description": "Anime streams (SUB + DUB) with subtitles in 9 languages from hianime.ms via VidNest API",
