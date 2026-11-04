@@ -2,13 +2,33 @@ var BASE = "https://sezonlukdizi.cc";
 var ADDON_NAME = "SezonlukDizi";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 var TMDB_API_KEY = (typeof __TMDB_KEY__ !== "undefined" && __TMDB_KEY__) ? __TMDB_KEY__ : "1865f43a0549ca50d341dd9ab8b29f49";
-var ALT_LIMIT = 8;
+var ALT_LIMIT = 10;
+
+var CP1254_HIGH = { 0xd0: "\u011e", 0xdd: "\u0130", 0xde: "\u015e", 0xf0: "\u011f", 0xfd: "\u0131", 0xfe: "\u015f" };
+
+function decodeCp1254(bytes) {
+    var out = "";
+    for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        out += CP1254_HIGH[b] || String.fromCharCode(b);
+    }
+    return out;
+}
+
+function responseText(r) {
+    var charset = "";
+    try { charset = (r.headers && r.headers.get && r.headers.get("content-type")) || ""; } catch (e) {}
+    if (/windows-1254|cp1254/i.test(charset) && r.arrayBuffer) {
+        return r.arrayBuffer().then(function (buf) { return decodeCp1254(new Uint8Array(buf)); });
+    }
+    return r.text();
+}
 
 function fetchText(url, headers, options) {
     var opt = { headers: headers || { "User-Agent": USER_AGENT }, redirect: "follow" };
     if (options && options.method) opt.method = options.method;
     if (options && options.body) opt.body = options.body;
-    return fetch(url, opt).then(function (r) { return r.text(); }).catch(function () { return ""; });
+    return fetch(url, opt).then(responseText).catch(function () { return ""; });
 }
 
 function fetchJson(url, headers, options) {
@@ -125,21 +145,153 @@ function alternatives(bid, dil) {
     });
 }
 
-function embedSrc(id) {
+function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+function embedRequest(id) {
     return fetchText(BASE + "/ajax/dataEmbed22.asp", {
         "User-Agent": USER_AGENT,
         "Referer": BASE + "/",
         "X-Requested-With": "XMLHttpRequest",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-    }, { method: "POST", body: "id=" + encodeURIComponent(id) }).then(function (html) {
+    }, { method: "POST", body: "id=" + encodeURIComponent(id) });
+}
+
+function embedSrc(id) {
+    return embedRequest(id).then(function (html) {
+        if (html && /error code: 1015|rate limit/i.test(html)) {
+            return sleep(1200).then(function () { return embedRequest(id); });
+        }
+        return html;
+    }).then(function (html) {
         var m = /<iframe[^>]*\bsrc="([^"]+)"/i.exec(html || "");
         if (!m) return null;
         var src = m[1];
-        if (src.indexOf("/ajax/reCAPTCHA") !== -1 || src.indexOf("reCAPTCHA") !== -1) return null;
+        if (/reCAPTCHA|turnstile|challenges\.cloudflare/i.test(src)) return null;
         if (src.indexOf("//") === 0) src = "https:" + src;
         if (!/^https?:/i.test(src)) src = BASE + src;
         return src;
     });
+}
+
+function mapLimit(items, limit, fn) {
+    var results = new Array(items.length);
+    var next = 0;
+    var active = 0;
+    var done = 0;
+    return new Promise(function (resolve) {
+        function launch() {
+            while (active < limit && next < items.length) {
+                (function (index) {
+                    active++;
+                    Promise.resolve().then(function () {
+                        return fn(items[index], index);
+                    }).then(function (value) {
+                        results[index] = value || [];
+                    }, function () {
+                        results[index] = [];
+                    }).then(function () {
+                        active--;
+                        done++;
+                        if (done >= items.length) resolve(results);
+                        else launch();
+                    });
+                })(next++);
+            }
+        }
+        if (!items.length) resolve(results);
+        else launch();
+    });
+}
+
+function hostOrigin(url) {
+    var m = /^(https?:\/\/[^\/]+)/i.exec(String(url || ""));
+    return m ? m[1] : "";
+}
+
+function embedCode(url) {
+    var segs = String(url || "").replace(/[?#].*$/, "").split("/").filter(Boolean);
+    return segs.length ? segs[segs.length - 1].replace(/\.html$/i, "") : "";
+}
+
+function makeStream(url, language, referer) {
+    return {
+        name: ADDON_NAME,
+        title: "auto \u00b7 " + language,
+        url: url,
+        quality: "auto",
+        language: "tr",
+        type: /\.m3u8/i.test(url) ? "hls" : "file",
+        headers: { "User-Agent": USER_AGENT, "Referer": referer + "/", "Origin": referer }
+    };
+}
+
+function resolveGeneric(src, language) {
+    var origin = hostOrigin(src);
+    return fetchText(src, { "User-Agent": USER_AGENT, "Referer": BASE + "/" }).then(function (html) {
+        var text = String(html || "").replace(/\\\//g, "/");
+        var m = /https?:\/\/[^"'\s\\]+?\.m3u8[^"'\s\\]*/i.exec(text) ||
+            /"file"\s*:\s*"([^"]+\.m3u8[^"]*)"/i.exec(text) ||
+            /https?:\/\/[^"'\s\\]+?\.mp4[^"'\s\\]*/i.exec(text);
+        if (!m) return [];
+        return [makeStream(m[1] || m[0], language, origin)];
+    });
+}
+
+function resolveVidmoly(src, language) {
+    return resolveGeneric(src, language);
+}
+
+function resolveOkru(src, language) {
+    var m = /(?:videoembed|video)\/(\d+)/i.exec(src) || /[?&]mid=(\d+)/i.exec(src);
+    if (!m) return resolveGeneric(src, language);
+    return fetchJson("https://ok.ru/dk?cmd=videoPlayerMetadata&mid=" + m[1], {
+        "User-Agent": USER_AGENT,
+        "Referer": "https://ok.ru/"
+    }).then(function (data) {
+        if (!data) return [];
+        var out = [];
+        var push = function (url) { if (url && out.indexOf(url) === -1) out.push(url); };
+        push(data.hlsManifestUrl);
+        if (Array.isArray(data.hls)) for (var h = 0; h < data.hls.length; h++) push(data.hls[h] && data.hls[h].url);
+        var best = null;
+        if (Array.isArray(data.videos)) {
+            for (var i = 0; i < data.videos.length; i++) {
+                var v = data.videos[i];
+                if (v && v.url && (!best || (Number(v.height) || 0) > (Number(best.height) || 0))) best = v;
+            }
+        } else if (data.video && data.video.url) {
+            best = data.video;
+        }
+        if (best) push(best.url);
+        return out.map(function (url) { return makeStream(url, language, "https://ok.ru"); });
+    });
+}
+
+function resolvePixel(src, language) {
+    var m = /[?&]v=([A-Za-z0-9]+)/.exec(src) || /pixeldrain\.com\/(?:u|api\/file)\/([A-Za-z0-9]+)/i.exec(src);
+    if (!m) return resolveGeneric(src, language);
+    var url = "https://pixeldrain.com/api/file/" + m[1] + "?download";
+    return Promise.resolve([makeStream(url, language, "https://pixeldrain.com")]);
+}
+
+function resolveEmbed(src, language) {
+    if (!src || src.indexOf(BASE) !== -1) return Promise.resolve([]);
+    var origin = hostOrigin(src);
+    if (!origin) return Promise.resolve([]);
+    var host = origin.replace(/^https?:\/\//i, "").toLowerCase();
+    if (/bysejikuar|filemoon|byse\./i.test(host)) {
+        var code = embedCode(src);
+        return resolveByse(origin, code, language).then(function (streams) {
+            if (streams && streams.length) return streams;
+            return sleep(800).then(function () { return resolveByse(origin, code, language); });
+        });
+    }
+    if (/vidmoly/i.test(host)) return resolveVidmoly(src, language);
+    if (/ok\.ru|okru/i.test(host)) return resolveOkru(src, language);
+    if (/pixeldrain|pixel/i.test(host) || /[?&]v=[A-Za-z0-9]+/.test(src)) return resolvePixel(src, language);
+    return resolveGeneric(src, language);
 }
 
 var B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -539,8 +691,8 @@ function solvePow(nonce, difficulty) {
 function byseApi(origin, path, body, method, token) {
     var headers = {
         "User-Agent": USER_AGENT,
-        "Referer": origin + "/",
-        "Origin": origin,
+        "Referer": BASE + "/",
+        "Origin": BASE,
         "X-Embed-Origin": BASE,
         "X-Embed-Referer": BASE + "/",
         "X-Embed-Parent": origin,
@@ -561,7 +713,7 @@ function byseApi(origin, path, body, method, token) {
     }).catch(function () { return { status: 0, body: null }; });
 }
 
-function resolveByse(origin, code) {
+function resolveByse(origin, code, language) {
     return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/details", null, "GET").then(function (det) {
         if (det.status !== 200 || !det.body || !det.body.code) return null;
         return byseApi(origin, "/api/videos/access/challenge", {}).then(function (ch) {
@@ -625,7 +777,7 @@ function resolveByse(origin, code) {
         return sources.filter(function (s) { return s && s.url; }).map(function (s) {
             var stream = {
                 name: ADDON_NAME,
-                title: (s.label || "auto") + " \u00b7 Dublaj",
+                title: (s.label || "auto") + " \u00b7 " + (language || "Dublaj"),
                 url: s.url,
                 quality: s.height ? (s.height + "p") : (s.label || "auto"),
                 language: "tr",
@@ -639,53 +791,111 @@ function resolveByse(origin, code) {
     });
 }
 
+function hostPriority(label) {
+    var name = normalize(label);
+    if (/filemoon|byse/.test(name)) return 0;
+    if (/vidmoly/.test(name)) return 1;
+    if (/okru/.test(name)) return 2;
+    if (/pixel|pixeldrain/.test(name)) return 3;
+    if (/dzen/.test(name)) return 4;
+    return 5;
+}
+
+function slugify(value) {
+    return normalize(value).replace(/\s+/g, "-");
+}
+
+function guessShow(meta) {
+    var candidates = [];
+    var add = function (value) {
+        var slug = slugify(value);
+        if (!slug) return;
+        if (candidates.indexOf(slug) === -1) candidates.push(slug);
+        if (meta.year) {
+            var withYear = slug + "-" + meta.year;
+            if (candidates.indexOf(withYear) === -1) candidates.push(withYear);
+        }
+    };
+    add(meta.original);
+    add(meta.title);
+
+    function attempt(i) {
+        if (i >= candidates.length) return Promise.resolve(null);
+        var slug = candidates[i];
+        return fetchText(BASE + "/diziler/" + slug + ".html", { "User-Agent": USER_AGENT, "Referer": BASE + "/" }).then(function (html) {
+            if (html && html.indexOf("bulamad") === -1 && html.indexOf("dizidetay") !== -1) {
+                return { url: "/diziler/" + slug + ".html", title: meta.title };
+            }
+            return attempt(i + 1);
+        });
+    }
+    return attempt(0);
+}
+
+function findShow(meta) {
+    var titles = [meta.title];
+    if (meta.original && normalize(meta.original) !== normalize(meta.title)) titles.push(meta.original);
+    return Promise.all(titles.map(function (title) { return searchSite(title); })).then(function (lists) {
+        var merged = [];
+        var seen = {};
+        for (var i = 0; i < lists.length; i++) {
+            var list = lists[i] || [];
+            for (var j = 0; j < list.length; j++) {
+                var item = list[j];
+                if (!item || !item.url || seen[item.url]) continue;
+                seen[item.url] = true;
+                merged.push(item);
+            }
+        }
+        return pickShow(merged, meta);
+    }).then(function (show) {
+        return show || guessShow(meta);
+    });
+}
+
 function getStreams(tmdbId, mediaType, season, episode) {
     return tmdbMeta(tmdbId, mediaType).then(function (meta) {
         if (!meta || !meta.title) return [];
-        return searchSite(meta.title).then(function (results) {
-            if ((!results || !results.length) && meta.original) {
-                return searchSite(meta.original).then(function (r2) { return r2 || []; });
-            }
-            return results || [];
-        }).then(function (results) {
-            var show = pickShow(results, meta);
+        return findShow(meta).then(function (show) {
             if (!show) { console.log("[SZD] show not found: " + meta.title); return []; }
             var slug = slugFromUrl(show.url);
             if (!slug) return [];
             return episodeHtml(slug, season, episode).then(function (html) {
                 var bid = html ? findEpisodeId(html) : null;
                 if (!bid) { console.log("[SZD] episode not found " + season + "x" + episode); return []; }
-                return alternatives(bid, 0).then(function (list) {
-                    if (!list.length) return alternatives(bid, 1).then(function (l2) { return { list: l2, dil: 1 }; });
-                    return { list: list, dil: 0 };
-                }).then(function (alt) {
-                    var list = (alt.list || []).slice(0, ALT_LIMIT);
-                    if (!list.length) { console.log("[SZD] no alternatives"); return []; }
-                    var tasks = list.map(function (a) {
-                        return embedSrc(a.id).then(function (src) {
-                            if (!src || src.indexOf(BASE) !== -1) return [];
-                            var host = /^(https?:\/\/[^\/]+)\//i.exec(src);
-                            if (!host) return [];
-                            var origin = host[1];
-                            var segs = src.slice(origin.length).replace(/[?#].*$/, "").split("/").filter(Boolean);
-                            var code = segs[segs.length - 1];
-                            if (!code) return [];
-                            return resolveByse(origin, code).then(function (streams) {
-                                for (var i = 0; i < streams.length; i++) {
-                                    if (alt.dil === 1) streams[i].title = streams[i].title.replace("Dublaj", "Altyaz\u0131");
-                                }
-                                return streams;
-                            });
+                return Promise.all([alternatives(bid, 0), alternatives(bid, 1)]).then(function (lists) {
+                    var dub = lists[0] || [];
+                    var sub = lists[1] || [];
+                    var perLang = dub.length && sub.length ? Math.ceil(ALT_LIMIT / 2) : ALT_LIMIT;
+                    var candidates = [];
+                    var seen = {};
+                    var collect = function (list, language) {
+                        var sorted = list.slice().sort(function (a, b) {
+                            return hostPriority(a && a.baslik) - hostPriority(b && b.baslik);
                         });
-                    });
-                    return Promise.all(tasks).then(function (lists) {
+                        for (var i = 0; i < sorted.length && i < perLang; i++) {
+                            var item = sorted[i];
+                            if (!item || !item.id || seen[item.id]) continue;
+                            seen[item.id] = true;
+                            candidates.push({ id: item.id, language: language });
+                        }
+                    };
+                    collect(dub, "Dublaj");
+                    collect(sub, "Altyaz\u0131");
+                    if (!candidates.length) { console.log("[SZD] no alternatives"); return []; }
+                    return mapLimit(candidates, 3, function (a) {
+                        return embedSrc(a.id).then(function (src) {
+                            if (!src) { return []; }
+                            return resolveEmbed(src, a.language);
+                        });
+                    }).then(function (results) {
                         var out = [];
-                        var seen = {};
-                        for (var i = 0; i < lists.length; i++) {
-                            for (var j = 0; j < lists[i].length; j++) {
-                                var st = lists[i][j];
-                                if (seen[st.url]) continue;
-                                seen[st.url] = true;
+                        var urls = {};
+                        for (var i = 0; i < results.length; i++) {
+                            for (var j = 0; j < results[i].length; j++) {
+                                var st = results[i][j];
+                                if (!st || !st.url || urls[st.url]) continue;
+                                urls[st.url] = true;
                                 out.push(st);
                             }
                         }
