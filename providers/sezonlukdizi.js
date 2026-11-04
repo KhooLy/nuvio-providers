@@ -751,14 +751,58 @@ function byseApi(origin, path, body, method, token) {
     }).catch(function () { return { status: 0, body: null }; });
 }
 
+var BYSE_STORAGE_KEY = "__szdByseSessions";
+
+function byseStorage() {
+    try {
+        if (typeof process !== "undefined" && process.versions && process.versions.node && typeof window === "undefined") return null;
+        if (typeof localStorage === "undefined") return null;
+        return localStorage;
+    } catch (e) {
+        return null;
+    }
+}
+
+function byseStoredSessions() {
+    try {
+        var storage = byseStorage();
+        if (!storage) return null;
+        var raw = storage.getItem(BYSE_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function byseSaveSessions() {
+    try {
+        var storage = byseStorage();
+        if (!storage) return;
+        var clean = {};
+        for (var origin in BYSE_SESSIONS) {
+            if (!Object.prototype.hasOwnProperty.call(BYSE_SESSIONS, origin)) continue;
+            var session = BYSE_SESSIONS[origin];
+            clean[origin] = {
+                fingerprint: session.fingerprint,
+                fingerprintExpires: session.fingerprintExpires,
+                token: session.token,
+                tokenViewer: session.tokenViewer,
+                tokenExpires: session.tokenExpires
+            };
+        }
+        storage.setItem(BYSE_STORAGE_KEY, JSON.stringify(clean));
+    } catch (e) {}
+}
+
 var BYSE_SESSIONS = (function () {
+    var stored = byseStoredSessions();
     if (typeof globalThis !== "undefined") {
         if (!globalThis.__szdByseSessions) {
-            try { globalThis.__szdByseSessions = {}; } catch (e) {}
+            try { globalThis.__szdByseSessions = stored || {}; } catch (e) {}
         }
         if (globalThis.__szdByseSessions) return globalThis.__szdByseSessions;
     }
-    return {};
+    return stored || {};
 })();
 
 function byseSession(origin) {
@@ -815,6 +859,7 @@ function byseFingerprint(origin) {
         if (fingerprint) {
             session.fingerprint = fingerprint;
             session.fingerprintExpires = Date.now() + 9 * 60 * 1000;
+            byseSaveSessions();
         }
         return fingerprint;
     }, function () {
@@ -859,6 +904,7 @@ function byseToken(origin, code) {
         session.token = result.token;
         session.tokenViewer = tokenViewer;
         session.tokenExpires = Date.now() + Math.max(60, (result.expiresIn || 1800) - 60) * 1000;
+        byseSaveSessions();
         return session.token;
     }, function () {
         session.tokenWait = null;
@@ -873,6 +919,7 @@ function byseClearToken(origin) {
     session.tokenViewer = null;
     session.tokenExpires = 0;
     session.tokenWait = null;
+    byseSaveSessions();
 }
 
 function resolveByse(origin, code, language) {
