@@ -116,9 +116,9 @@ function findEpisode(seriesHtml, season, episode) {
 }
 
 function extractServerBlob(html) {
-    var m = /JSON\.parse\(atob\(\\?["']([A-Za-z0-9+/=]{40,})\\?["']\)\)/.exec(html);
+    var m = /JSON\.parse\(atob\(\\?["']([^"']+)\\?["']\)\)/.exec(html);
     if (!m) return null;
-    try { return JSON.parse(b64decode(m[1])); } catch (e) { return null; }
+    try { return JSON.parse(b64decode(m[1].replace(/\\\//g, "/"))); } catch (e) { return null; }
 }
 
 function normalizeServers(blob) {
