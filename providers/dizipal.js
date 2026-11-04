@@ -259,6 +259,40 @@ function nativeFetch(url, headers, redirect) {
     }).catch(function () { return null; });
 }
 
+function nodeFetchText(url, headers) {
+    if (typeof process === "undefined" || !process.versions || !process.versions.node) return null;
+    var https = null;
+    try { https = require("https"); } catch (e) { return null; }
+    if (typeof Buffer === "undefined") return null;
+    return new Promise(function (resolve) {
+        function request(target, hops) {
+            var host = "";
+            var m = /^https?:\/\/([^\/]+)/i.exec(target);
+            if (m) host = m[1];
+            var out = {};
+            if (host) out.Host = host;
+            for (var k in headers || {}) {
+                if (k.toLowerCase() === "host") continue;
+                out[k] = headers[k];
+            }
+            var req = https.get(target, { headers: out }, function (res) {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops > 0) {
+                    res.resume();
+                    var next = res.headers.location;
+                    try { next = new URL(next, target).toString(); } catch (e) { return resolve(""); }
+                    return request(next, hops - 1);
+                }
+                var chunks = [];
+                res.on("data", function (c) { chunks.push(c); });
+                res.on("end", function () { resolve(Buffer.concat(chunks).toString("utf8")); });
+            });
+            req.on("error", function () { resolve(""); });
+            req.setTimeout(20000, function () { req.destroy(); resolve(""); });
+        }
+        request(url, 5);
+    });
+}
+
 function fetchText(url, headers, options) {
     var opt = { headers: headers || { "User-Agent": USER_AGENT }, redirect: "follow" };
     if (options && options.method) opt.method = options.method;
@@ -266,8 +300,12 @@ function fetchText(url, headers, options) {
     var native = opt.method ? null : nativeFetch(url, opt.headers, opt.redirect);
     if (native) return native.then(function (r) {
         if (r && r.ok) return r.text;
+        var node = nodeFetchText(url, opt.headers);
+        if (node) return node;
         return fetch(url, opt).then(function (res) { return res.text(); }).catch(function () { return ""; });
     });
+    var node = opt.method ? null : nodeFetchText(url, opt.headers);
+    if (node) return node;
     return fetch(url, opt).then(function (r) { return r.text(); }).catch(function () { return ""; });
 }
 
