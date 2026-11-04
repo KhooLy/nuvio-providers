@@ -8,7 +8,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | :--- | :--- | :--- | :--- | :--- |
 | **Cinefreak** | `cinefreak` | Movies & Series | EN / HI, direct links | `cinefreak.net` |
 | **Vidy** | `vidy` | Movies & Series | HLS up to 4K, multi-audio | `vidy.st` |
-| **Arctic** | `arctic` | Movies & Series | Multi-quality direct links | PenguPlay |
 | **HDFilmizle** | `hdfilmizle` | Movies & Series | TR / EN Audio, EN Subtitles | `hdfilmizle.vip` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
 | **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
@@ -20,17 +19,11 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **MovieBox** | `moviebox` | Movies & Series | Direct MP4 | MovieBox API |
 | **MoviesDrive** | `moviesdrive` | Movies & Series | EN / HI, HubCloud & Pixeldrain | `moviesdrive.christmas` |
 | **VaPlayer** | `vaplayer` | Movies & Series | HLS | `vaplayer.ru` |
-| **Miruro** | `miruro` | Anime Series | SUB + subtitles | `miruro.to` |
-| **VidLink** | `vidlink` | Movies & Series | HLS + subtitles | `vidlink.pro` |
 | **2Peckle** | `2peckle` | Movies & Series | Direct MP4 | Pengu addon |
 | **ToonWorld4All** | `toonworld4all` | Animated Movies & Series | EN / HI direct links | `toonworld4all.me` |
-| **Ani.pm** | `anipm` | Anime Series | HLS & embeds | `ani.pm` |
-| **Reanime** | `reanime` | Anime Series | SUB | `reanime.cz` |
 | **LaMovie** | `lamovie` | Movies & Series | ES / EN HLS | `lamovie.org` |
 | **KissKH** | `kisskh` | Asian Drama & Anime Series | HLS + subtitles | `kisskh.co` |
-| **HDHub4u** | `hdhub4u` | Movies & Series | EN / HI, HubCloud | `hdhub4u` |
 | **VegaMovies** | `vegamovies` | Movies & Series | EN / HI, Google & GDTot | `vegamovies.lease` |
-| **VidFast** | `vidfast` | Movies & Series | HLS + subtitles | `vidfast.vc` |
 | **Cinejoy** | `cinejoy` | Movies & Series | HLS + Stremio subtitles | `cinejoy.pk` |
 | **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
 | **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |

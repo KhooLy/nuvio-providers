@@ -250,50 +250,6 @@
       "supportsExternalPlayer": true
     },
     {
-      "id": "miruro",
-      "name": "Miruro",
-      "description": "Anime series via Miruro with SUB streams and subtitles",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "tv"
-      ],
-      "filename": "providers/miruro.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8"
-      ],
-      "contentLanguage": [
-        "ja",
-        "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "vidlink",
-      "name": "VidLink",
-      "description": "Movies and series via VidLink with HLS streams and subtitles",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/vidlink.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8"
-      ],
-      "contentLanguage": [
-        "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
       "id": "2peckle",
       "name": "2Peckle",
       "description": "Movies and series via 2Peckle with direct MP4 streams",
@@ -335,52 +291,6 @@
       "contentLanguage": [
         "en",
         "hi"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "anipm",
-      "name": "Ani.pm",
-      "description": "Anime series via Ani.pm with HLS and embed streams",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "tv"
-      ],
-      "filename": "providers/anipm.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "ja",
-        "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "reanime",
-      "name": "Reanime",
-      "description": "Anime series via Reanime with SUB streams",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "tv"
-      ],
-      "filename": "providers/reanime.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "mkv",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "ja",
-        "en"
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -433,30 +343,6 @@
       "supportsExternalPlayer": true
     },
     {
-      "id": "hdhub4u",
-      "name": "HDHub4u",
-      "description": "Movies and series via HDHub4u with direct HubCloud links",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/hdhub4u.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "mkv",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "en",
-        "hi"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
       "id": "vegamovies",
       "name": "VegaMovies",
       "description": "Movies and series via VegaMovies with direct Google links and GDTot fallbacks",
@@ -476,28 +362,6 @@
       "contentLanguage": [
         "en",
         "hi"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "vidfast",
-      "name": "VidFast",
-      "description": "Movies and series via VidFast with HLS streams and subtitles",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/vidfast.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8"
-      ],
-      "contentLanguage": [
-        "en"
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -619,31 +483,6 @@
         "ja",
         "ko",
         "zh"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "arctic",
-      "name": "Arctic",
-      "description": "Multi-quality direct streams from the Arctic source (configurable PenguPlay token)",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/arctic.js",
-      "enabled": true,
-      "hasSettings": true,
-      "formats": [
-        "mkv",
-        "mp4",
-        "m3u8"
-      ],
-      "contentLanguage": [
-        "en",
-        "hi"
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
