@@ -67,9 +67,7 @@ The server will be available at:
 │   ├── apply-imdb.js        # Injects the IMDb→TMDB id resolver into providers
 │   ├── imdb.template.js     # Wraps getStreams so tt ids resolve before scraping
 │   ├── apply-liveness.js    # Injects the dead-link filter into providers
-│   ├── liveness.template.js # HEAD/Range probes streams and drops 4xx/dead urls
-│   ├── thumbnail.js         # Retry-based single-frame grabber for vidlove streams
-│   └── sprite.js            # Progressive tiered sprite sheet + preview.vtt generator
+│   └── liveness.template.js # HEAD/Range probes streams and drops 4xx/dead urls
 └── README.md
 ```
 
@@ -121,15 +119,6 @@ node -e 'require("./providers/321movies.js").getStreams("1399", "tv", 1, 1).then
 ```
 
 > **Note:** 111477 file links redirect through `p.111477.xyz`, which is protected by a Cloudflare browser check. The provider resolves the correct files, but in-app playback depends on the player being able to pass that check.
-
-### Sprite Sheets
-
-```bash
-# node tools/sprite.js <tmdbId> <movie|tv> [season] [episode] <outputDir> [finalIntervalSec]
-node tools/sprite.js 1396 tv 1 1 out/
-```
-
-Builds progressive sprite sheets from the lowest-quality vidlove stream: tier interval is picked from video duration (first sheet at ~100-130 frames), intermediate `coarse_t*.jpg` sheets are published as tiers complete, then final `sprite_XX.jpg` (default 5s interval) + `preview.vtt`.
 
 ---
 
