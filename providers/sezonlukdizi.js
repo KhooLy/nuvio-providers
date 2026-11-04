@@ -715,6 +715,10 @@ function powMeets(msg, len, difficulty) {
 }
 
 function solvePow(nonce, difficulty) {
+    if (typeof __pow_solve === "function") {
+        var native = __pow_solve(String(nonce), difficulty | 0);
+        if (native) return native;
+    }
     var prefix = nonce + ":";
     var msg = new Uint8Array(prefix.length + 16);
     for (var i = 0; i < prefix.length; i++) msg[i] = prefix.charCodeAt(i) & 255;
