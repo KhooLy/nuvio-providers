@@ -50,28 +50,6 @@
       "supportsExternalPlayer": true
     },
     {
-      "id": "vidlove",
-      "name": "Vidlove",
-      "description": "HLS streams (1080p/720p/480p) with subtitles for movies and series",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/vidlove.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8"
-      ],
-      "contentLanguage": [
-        "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
       "id": "hdhub",
       "name": "HDHub",
       "description": "Direct MKV links from 4khdhub",
@@ -316,29 +294,6 @@
       "supportsExternalPlayer": true
     },
     {
-      "id": "cinezo",
-      "name": "Cinezo",
-      "description": "Movies and series via Cinezo's Zendaya, Jennifer, Berlin, Scarlet and Sadie backends",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/cinezo.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
       "id": "2peckle",
       "name": "2Peckle",
       "description": "Movies and series via 2Peckle with direct MP4 streams",
@@ -449,28 +404,6 @@
       "contentLanguage": [
         "es",
         "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "moflix",
-      "name": "Moflix",
-      "description": "Movies and series via Moflix with German HLS streams",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/moflix.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8"
-      ],
-      "contentLanguage": [
-        "de"
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -633,29 +566,6 @@
       "contentLanguage": [
         "pl",
         "en"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
-      "id": "sololatino",
-      "name": "SoloLatino",
-      "description": "Latin American movies and series via SoloLatino with HLS streams",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/sololatino.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "m3u8",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "es"
       ],
       "disabledPlatforms": [],
       "supportsExternalPlayer": true

@@ -12,7 +12,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **HDFilmizle** | `hdfilmizle` | Movies & Series | TR / EN Audio, EN Subtitles | `hdfilmizle.vip` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
 | **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
-| **Vidlove** | `vidlove` | Movies & Series | HLS | `vidlove.st` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
 | **SezonlukDizi** | `sezonlukdizi` | Turkish Series | TR Dublaj/Altyazı HLS | `sezonlukdizi.cc` |
@@ -23,13 +22,11 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **VaPlayer** | `vaplayer` | Movies & Series | HLS | `vaplayer.ru` |
 | **Miruro** | `miruro` | Anime Series | SUB + subtitles | `miruro.to` |
 | **VidLink** | `vidlink` | Movies & Series | HLS + subtitles | `vidlink.pro` |
-| **Cinezo** | `cinezo` | Movies & Series | HLS/MP4 (5 backends) | `punkflix.net`, `flikhub.net` |
 | **2Peckle** | `2peckle` | Movies & Series | Direct MP4 | Pengu addon |
 | **ToonWorld4All** | `toonworld4all` | Animated Movies & Series | EN / HI direct links | `toonworld4all.me` |
 | **Ani.pm** | `anipm` | Anime Series | HLS & embeds | `ani.pm` |
 | **Reanime** | `reanime` | Anime Series | SUB | `reanime.cz` |
 | **LaMovie** | `lamovie` | Movies & Series | ES / EN HLS | `lamovie.org` |
-| **Moflix** | `moflix` | Movies & Series | DE HLS | `moflix-stream.xyz` |
 | **KissKH** | `kisskh` | Asian Drama & Anime Series | HLS + subtitles | `kisskh.co` |
 | **HDHub4u** | `hdhub4u` | Movies & Series | EN / HI, HubCloud | `hdhub4u` |
 | **VegaMovies** | `vegamovies` | Movies & Series | EN / HI, Google & GDTot | `vegamovies.lease` |
@@ -37,7 +34,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **Cinejoy** | `cinejoy` | Movies & Series | HLS + Stremio subtitles | `cinejoy.pk` |
 | **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
 | **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |
-| **SoloLatino** | `sololatino` | Movies & Series | ES/LA HLS | `sololatino.net` |
 | **111477** | `111477` | Movies & Series (incl. KDrama / Asian drama) | Direct MKV/MP4, multi-audio | `a.111477.xyz` |
 | **1Shows** | `oneshows` | Movies & Series | HLS via Vidy / VidFast / VidLink / VidRock, multi-language subs | `1shows.org` |
 | **321Movies** | `321movies` | Movies & Series | Adaptive HLS via the VixSrc backend, multi-audio & subs | `vixsrc.to` |
@@ -123,8 +119,6 @@ node -e 'require("./providers/oneshows.js").getStreams("1399", "tv", 1, 1).then(
 node -e 'require("./providers/321movies.js").getStreams("27205", "movie").then(console.log)'
 node -e 'require("./providers/321movies.js").getStreams("1399", "tv", 1, 1).then(console.log)'
 ```
-
-> **Note:** Vidlove moved from `vidlove.cc` to `vidlove.st` on 2026-10-29; the old domain's nameservers now refuse queries and the new one had no A records at the time of writing. `providers/vidlove.js` probes `api.vidlove.st` first and falls back to `api.vidlove.cc`, so it resumes automatically once either host answers.
 
 > **Note:** 111477 file links redirect through `p.111477.xyz`, which is protected by a Cloudflare browser check. The provider resolves the correct files, but in-app playback depends on the player being able to pass that check.
 

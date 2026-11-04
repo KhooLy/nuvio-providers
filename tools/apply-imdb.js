@@ -13,7 +13,6 @@ const skip = new Set([
     'hdhub4u.js',
     'hianime.js',
     'reanime.js',
-    'sololatino.js',
     'vidy.js'
 ]);
 
