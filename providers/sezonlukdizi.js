@@ -624,66 +624,104 @@ function aesGcmDecrypt(key, iv, dataWithTag) {
 }
 
 var POW_BE = 512, POW_LT = 511, POW_DR = 2, POW_LR = 2654435761, POW_HR = 2246822519;
+var POW_BUF = new Int32Array(POW_BE);
 
-function powRot(t, e) { return ((t << e) | (t >>> (32 - e))) >>> 0; }
-
-function powYe(t) {
-    t[0]=(t[0]+t[1])>>>0; t[3]=powRot(t[3]^t[0],16);
-    t[2]=(t[2]+t[3])>>>0; t[1]=powRot(t[1]^t[2],12);
-    t[0]=(t[0]+t[1])>>>0; t[3]=powRot(t[3]^t[0],8);
-    t[2]=(t[2]+t[3])>>>0; t[1]=powRot(t[1]^t[2],7);
+function powWriteDigits(buf, off, value) {
+    var len;
+    if (value < 10) len = 1;
+    else if (value < 100) len = 2;
+    else if (value < 1000) len = 3;
+    else if (value < 10000) len = 4;
+    else if (value < 100000) len = 5;
+    else if (value < 1000000) len = 6;
+    else if (value < 10000000) len = 7;
+    else len = 8;
+    var pos = off + len;
+    var v = value;
+    while (v > 0) {
+        var q = (v / 10) | 0;
+        buf[--pos] = 48 + (v - q * 10);
+        v = q;
+    }
+    if (value === 0) buf[off] = 48;
+    return off + len;
 }
 
-function powHash(msg) {
-    var e = new Uint32Array([1779033703, 3144134277, 1013904242, 2773480762]);
-    for (var i = 0; i < msg.length; i++) { e[0]=(e[0]+msg[i])>>>0; e[0]=powRot(e[0],7); powYe(e); }
-    for (var a = 0; a < 8; a++) powYe(e);
-    var r = new Uint32Array(POW_BE);
-    for (var b = 0; b < POW_BE; b++) { powYe(e); r[b] = (e[0] ^ e[2]) >>> 0; }
-    for (var d = 0; d < POW_DR; d++) {
-        for (var s = 0; s < POW_BE; s++) {
-            var ai = r[s] & POW_LT;
-            var c = (r[s] + r[ai]) >>> 0;
-            c = powRot(c, 13);
-            c = (c ^ (Math.imul(r[(s+1) & POW_LT], POW_LR) >>> 0)) >>> 0;
-            r[s] = c;
-            e[0] = (e[0] ^ c) >>> 0;
-            powYe(e);
+function powMeets(msg, len, difficulty) {
+    var imul = Math.imul, clz = Math.clz32, lr = POW_LR, hr = POW_HR, be = POW_BE, lt = POW_LT;
+    var R = POW_BUF;
+    var a = 1779033703, b = 3144134277, c = 1013904242, d = 2773480762;
+    var zeros = 0, x, q, s, sv, base, dd, ai, cc, rs;
+
+    for (var i = 0; i < len; i++) {
+        a = (a + msg[i]) | 0; a = (a << 7 | a >>> 25);
+        a = (a + b) | 0; x = d ^ a; d = (x << 16 | x >>> 16);
+        c = (c + d) | 0; x = b ^ c; b = (x << 12 | x >>> 20);
+        a = (a + b) | 0; x = d ^ a; d = (x << 8 | x >>> 24);
+        c = (c + d) | 0; x = b ^ c; b = (x << 7 | x >>> 25);
+    }
+    for (var p = 0; p < 8; p++) {
+        a = (a + b) | 0; x = d ^ a; d = (x << 16 | x >>> 16);
+        c = (c + d) | 0; x = b ^ c; b = (x << 12 | x >>> 20);
+        a = (a + b) | 0; x = d ^ a; d = (x << 8 | x >>> 24);
+        c = (c + d) | 0; x = b ^ c; b = (x << 7 | x >>> 25);
+    }
+    for (q = 0; q < be; q++) {
+        a = (a + b) | 0; x = d ^ a; d = (x << 16 | x >>> 16);
+        c = (c + d) | 0; x = b ^ c; b = (x << 12 | x >>> 20);
+        a = (a + b) | 0; x = d ^ a; d = (x << 8 | x >>> 24);
+        c = (c + d) | 0; x = b ^ c; b = (x << 7 | x >>> 25);
+        R[q] = a ^ c;
+    }
+    for (var dr = 0; dr < POW_DR; dr++) {
+        for (s = 0; s < be; s++) {
+            rs = R[s];
+            ai = rs & lt;
+            cc = (rs + R[ai]) | 0;
+            cc = (cc << 13 | cc >>> 19);
+            cc = cc ^ imul(R[(s + 1) & lt], lr);
+            R[s] = cc;
+            a = a ^ cc;
+            a = (a + b) | 0; x = d ^ a; d = (x << 16 | x >>> 16);
+            c = (c + d) | 0; x = b ^ c; b = (x << 12 | x >>> 20);
+            a = (a + b) | 0; x = d ^ a; d = (x << 8 | x >>> 24);
+            c = (c + d) | 0; x = b ^ c; b = (x << 7 | x >>> 25);
         }
     }
-    var out = new Uint32Array(8), o = POW_BE / 8;
-    for (var x = 0; x < 8; x++) {
-        powYe(e);
-        var sv = e[0];
-        var base = x * o;
+    var o = be / 8;
+    for (var xx = 0; xx < 8; xx++) {
+        a = (a + b) | 0; x = d ^ a; d = (x << 16 | x >>> 16);
+        c = (c + d) | 0; x = b ^ c; b = (x << 12 | x >>> 20);
+        a = (a + b) | 0; x = d ^ a; d = (x << 8 | x >>> 24);
+        c = (c + d) | 0; x = b ^ c; b = (x << 7 | x >>> 25);
+        sv = a;
+        base = xx * o;
         for (var y = 0; y < o; y++) {
-            var dd = r[base + y];
-            sv = (sv + dd) >>> 0;
-            sv = powRot(sv, 5);
-            sv = (sv ^ (Math.imul(dd, POW_HR) >>> 0)) >>> 0;
+            dd = R[base + y];
+            sv = (sv + dd) | 0;
+            sv = (sv << 5 | sv >>> 27);
+            sv = sv ^ imul(dd, hr);
         }
-        out[x] = (sv ^ e[2]) >>> 0;
+        var w = sv ^ c;
+        if (w === 0) {
+            zeros += 32;
+            if (zeros >= difficulty) return true;
+            continue;
+        }
+        zeros += clz(w);
+        return zeros >= difficulty;
     }
-    return out;
-}
-
-function leadingZeroBits(h) {
-    var e = 0;
-    for (var i = 0; i < h.length; i++) {
-        if (h[i] === 0) { e += 32; continue; }
-        return e + Math.clz32(h[i]);
-    }
-    return e;
+    return zeros >= difficulty;
 }
 
 function solvePow(nonce, difficulty) {
     var prefix = nonce + ":";
+    var msg = new Uint8Array(prefix.length + 16);
+    for (var i = 0; i < prefix.length; i++) msg[i] = prefix.charCodeAt(i) & 255;
     var limit = 1 << 24;
     for (var s = 0; s < limit; s++) {
-        var text = prefix + s;
-        var bytes = new Uint8Array(text.length);
-        for (var i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 255;
-        if (leadingZeroBits(powHash(bytes)) >= difficulty) return String(s);
+        var len = powWriteDigits(msg, prefix.length, s);
+        if (powMeets(msg, len, difficulty)) return String(s);
     }
     return null;
 }
@@ -713,47 +751,149 @@ function byseApi(origin, path, body, method, token) {
     }).catch(function () { return { status: 0, body: null }; });
 }
 
-function resolveByse(origin, code, language) {
-    return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/details", null, "GET").then(function (det) {
-        if (det.status !== 200 || !det.body || !det.body.code) return null;
-        return byseApi(origin, "/api/videos/access/challenge", {}).then(function (ch) {
-            if (!ch.body || !ch.body.nonce) return null;
-            var key = ecdsaKeypair();
-            var sig = ecdsaSign(key, utf8Encode(ch.body.nonce));
-            return byseApi(origin, "/api/videos/access/attest", {
-                viewer_id: "",
-                device_id: "",
-                challenge_id: ch.body.challenge_id,
-                nonce: ch.body.nonce,
-                signature: b64u(sig),
-                public_key: pubJwk(key),
-                client: { user_agent: USER_AGENT },
-                storage: {},
-                attributes: { entropy: "medium" }
-            });
+var BYSE_SESSIONS = (function () {
+    if (typeof globalThis !== "undefined") {
+        if (!globalThis.__szdByseSessions) {
+            try { globalThis.__szdByseSessions = {}; } catch (e) {}
+        }
+        if (globalThis.__szdByseSessions) return globalThis.__szdByseSessions;
+    }
+    return {};
+})();
+
+function byseSession(origin) {
+    var session = BYSE_SESSIONS[origin];
+    if (!session) {
+        session = BYSE_SESSIONS[origin] = {
+            fingerprint: null,
+            fingerprintExpires: 0,
+            fingerprintWait: null,
+            token: null,
+            tokenViewer: null,
+            tokenExpires: 0,
+            tokenWait: null
+        };
+    }
+    return session;
+}
+
+function byseAttest(origin) {
+    return byseApi(origin, "/api/videos/access/challenge", {}).then(function (ch) {
+        if (!ch.body || !ch.body.nonce) return null;
+        var key = ecdsaKeypair();
+        var sig = ecdsaSign(key, utf8Encode(ch.body.nonce));
+        return byseApi(origin, "/api/videos/access/attest", {
+            viewer_id: "",
+            device_id: "",
+            challenge_id: ch.body.challenge_id,
+            nonce: ch.body.nonce,
+            signature: b64u(sig),
+            public_key: pubJwk(key),
+            client: { user_agent: USER_AGENT },
+            storage: {},
+            attributes: { entropy: "medium" }
         }).then(function (at) {
             if (!at.body || !at.body.token) return null;
-            var fingerprint = {
+            return {
                 token: at.body.token,
                 viewer_id: at.body.viewer_id,
                 device_id: at.body.device_id,
                 confidence: at.body.confidence
             };
-            return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/captcha", {}).then(function (cap) {
-                if (!cap.body || !cap.body.pow_nonce) return null;
-                var solution = solvePow(cap.body.pow_nonce, cap.body.pow_difficulty);
-                if (solution === null) return null;
-                return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/captcha/verify", {
-                    pow_token: cap.body.pow_token,
-                    solution: solution
-                }).then(function (vv) {
-                    if (!vv.body || vv.body.status !== "ok" || !vv.body.token) return null;
-                    return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/playback",
-                        { fingerprint: fingerprint }, "POST", vv.body.token);
-                });
-            });
+        });
+    });
+}
+
+function byseFingerprint(origin) {
+    var session = byseSession(origin);
+    if (session.fingerprint && Date.now() < session.fingerprintExpires) {
+        return Promise.resolve(session.fingerprint);
+    }
+    if (session.fingerprintWait) return session.fingerprintWait;
+    session.fingerprintWait = byseAttest(origin).then(function (fingerprint) {
+        session.fingerprintWait = null;
+        if (fingerprint) {
+            session.fingerprint = fingerprint;
+            session.fingerprintExpires = Date.now() + 9 * 60 * 1000;
+        }
+        return fingerprint;
+    }, function () {
+        session.fingerprintWait = null;
+        return null;
+    });
+    return session.fingerprintWait;
+}
+
+function byseCaptcha(origin, code, fingerprint) {
+    return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/captcha",
+        { fingerprint: fingerprint }).then(function (cap) {
+        if (!cap.body || !cap.body.pow_nonce) return null;
+        var solution = solvePow(cap.body.pow_nonce, cap.body.pow_difficulty);
+        if (solution === null) return null;
+        return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/captcha/verify", {
+            pow_token: cap.body.pow_token,
+            solution: solution,
+            fingerprint: fingerprint
+        }).then(function (vv) {
+            if (!vv.body || vv.body.status !== "ok" || !vv.body.token) return null;
+            return { token: vv.body.token, expiresIn: vv.body.expires_in };
+        });
+    });
+}
+
+function byseToken(origin, code) {
+    var session = byseSession(origin);
+    var viewer = session.fingerprint && session.fingerprint.token;
+    if (session.token && Date.now() < session.tokenExpires && (!viewer || session.tokenViewer === viewer)) {
+        return Promise.resolve(session.token);
+    }
+    if (session.tokenWait) return session.tokenWait;
+    var tokenViewer = null;
+    session.tokenWait = byseFingerprint(origin).then(function (fingerprint) {
+        if (!fingerprint) return null;
+        tokenViewer = fingerprint.token;
+        return byseCaptcha(origin, code, fingerprint);
+    }).then(function (result) {
+        session.tokenWait = null;
+        if (!result || !result.token) return null;
+        session.token = result.token;
+        session.tokenViewer = tokenViewer;
+        session.tokenExpires = Date.now() + Math.max(60, (result.expiresIn || 1800) - 60) * 1000;
+        return session.token;
+    }, function () {
+        session.tokenWait = null;
+        return null;
+    });
+    return session.tokenWait;
+}
+
+function byseClearToken(origin) {
+    var session = byseSession(origin);
+    session.token = null;
+    session.tokenViewer = null;
+    session.tokenExpires = 0;
+    session.tokenWait = null;
+}
+
+function resolveByse(origin, code, language) {
+    return Promise.all([
+        byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/details", null, "GET"),
+        byseFingerprint(origin)
+    ]).then(function (res) {
+        var det = res[0];
+        var fingerprint = res[1];
+        if (det.status !== 200 || !det.body || !det.body.code) return null;
+        if (!fingerprint) return null;
+        return byseToken(origin, code).then(function (token) {
+            if (!token) return null;
+            return byseApi(origin, "/api/videos/" + encodeURIComponent(code) + "/embed/playback",
+                { fingerprint: fingerprint }, "POST", token);
         });
     }).then(function (pb) {
+        if (pb && pb.status === 428) {
+            byseClearToken(origin);
+            return [];
+        }
         if (!pb || pb.status !== 200 || !pb.body || !pb.body.playback) return [];
         var pl = pb.body.playback;
         if (!Array.isArray(pl.key_parts) || !pl.key_parts.length) return [];
