@@ -227,6 +227,35 @@ function makeStream(url, language, referer) {
     };
 }
 
+function hlsMaxHeight(text) {
+    var re = /RESOLUTION=(\d+)x(\d+)/gi;
+    var max = 0;
+    var m;
+    while ((m = re.exec(String(text || "")))) {
+        var height = parseInt(m[2], 10) || 0;
+        if (height > max) max = height;
+    }
+    return max;
+}
+
+function refineHlsQuality(stream) {
+    if (!stream || !/\.m3u8/i.test(String(stream.url || ""))) return Promise.resolve(stream);
+    return fetchText(stream.url, stream.headers || { "User-Agent": USER_AGENT }).then(function (text) {
+        var height = hlsMaxHeight(text);
+        if (!height) return stream;
+        var label = height + "p";
+        stream.quality = label;
+        var parts = String(stream.title || "").split(" \u00b7 ");
+        if (parts.length > 1) {
+            parts[0] = label;
+            stream.title = parts.join(" \u00b7 ");
+        } else {
+            stream.title = label;
+        }
+        return stream;
+    });
+}
+
 function resolveGeneric(src, language) {
     var origin = hostOrigin(src);
     return fetchText(src, { "User-Agent": USER_AGENT, "Referer": BASE + "/" }).then(function (html) {
@@ -1095,8 +1124,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
                                 out.push(st);
                             }
                         }
-                        console.log("[SZD] " + out.length + " streams for " + meta.title + " " + season + "x" + episode);
-                        return out;
+                        return Promise.all(out.map(refineHlsQuality)).then(function (refined) {
+                            console.log("[SZD] " + refined.length + " streams for " + meta.title + " " + season + "x" + episode);
+                            return refined;
+                        });
                     });
                 });
             });
