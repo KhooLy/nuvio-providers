@@ -12,8 +12,7 @@ for (const scraper of manifest.scrapers) {
 }
 
 const skip = new Set([
-    '2peckle.js',
-    'a111477.js'
+    '2peckle.js'
 ]);
 
 for (const file of fs.readdirSync(providersDir).sort()) {

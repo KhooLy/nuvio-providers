@@ -26,7 +26,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **Cinejoy** | `cinejoy` | Movies & Series | HLS + Stremio subtitles | `cinejoy.pk` |
 | **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
 | **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |
-| **111477** | `111477` | Movies & Series (incl. KDrama / Asian drama) | Direct MKV/MP4, multi-audio | `a.111477.xyz` |
 | **1Shows** | `oneshows` | Movies & Series | HLS via Vidy / VidFast / VidLink / VidRock, multi-language subs | `1shows.org` |
 | **321Movies** | `321movies` | Movies & Series | Adaptive HLS via the VixSrc backend, multi-audio & subs | `vixsrc.to` |
 
@@ -92,11 +91,6 @@ node -e 'require("./providers/dizipal.js").getStreams("27205", "movie").then(con
 # Test DiziBOX
 node -e 'require("./providers/dizibox.js").getStreams("196322", "tv", 2, 8).then(console.log)'
 
-# Test 111477
-node -e 'require("./providers/a111477.js").getStreams("27205", "movie").then(console.log)'
-node -e 'require("./providers/a111477.js").getStreams("1396", "tv", 1, 1).then(console.log)'
-node -e 'require("./providers/a111477.js").getStreams("81821", "tv", 1, 1).then(console.log)'
-
 # Test 1Shows
 node -e 'require("./providers/oneshows.js").getStreams("27205", "movie").then(console.log)'
 node -e 'require("./providers/oneshows.js").getStreams("1399", "tv", 1, 1).then(console.log)'
@@ -105,8 +99,6 @@ node -e 'require("./providers/oneshows.js").getStreams("1399", "tv", 1, 1).then(
 node -e 'require("./providers/321movies.js").getStreams("27205", "movie").then(console.log)'
 node -e 'require("./providers/321movies.js").getStreams("1399", "tv", 1, 1).then(console.log)'
 ```
-
-> **Note:** 111477 file links redirect through `p.111477.xyz`, which is protected by a Cloudflare browser check. The provider resolves the correct files, but in-app playback depends on the player being able to pass that check.
 
 ---
 
