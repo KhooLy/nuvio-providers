@@ -216,9 +216,10 @@ function embedCode(url) {
 }
 
 function makeStream(url, language, referer) {
+    var label = language || "Dublaj";
     return {
-        name: ADDON_NAME,
-        title: "auto \u00b7 " + language,
+        name: ADDON_NAME + " \u00b7 " + label,
+        title: "auto \u00b7 " + label,
         url: url,
         quality: "auto",
         language: "tr",
@@ -996,7 +997,7 @@ function resolveByse(origin, code, language) {
         var sources = (dec && Array.isArray(dec.sources)) ? dec.sources : [];
         return sources.filter(function (s) { return s && s.url; }).map(function (s) {
             var stream = {
-                name: ADDON_NAME,
+                name: ADDON_NAME + " \u00b7 " + (language || "Dublaj"),
                 title: (s.label || "auto") + " \u00b7 " + (language || "Dublaj"),
                 url: s.url,
                 quality: s.height ? (s.height + "p") : (s.label || "auto"),
