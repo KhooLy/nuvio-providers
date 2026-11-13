@@ -21,7 +21,9 @@ var __async = (__this, __arguments, generator) => {
 
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
 var TMDB_BASE_URL = "https://api.themoviedb.org/3";
-var VAPLAYER_API = "https://streamdata.vaplayer.ru";
+var VAPLAYER_WRAPPER = "https://vaplayer.ru";
+var VAPLAYER_API = "https://streamdata.vaplayer.ru/api.php";
+var VA_STREAM_REFERER = "https://nextgencloudfabric.com/";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 var metaCache = {};
@@ -123,6 +125,14 @@ function fetchText(url, headers, timeoutMs) {
     if (!res.ok)
       throw new Error("HTTP " + res.status + " for " + url);
     return yield res.text();
+  });
+}
+function fetchBytes(url, headers, timeoutMs) {
+  return __async(this, null, function* () {
+    const res = yield fetchWithTimeout(url, { headers: defaultHeaders(headers) }, timeoutMs);
+    if (!res.ok)
+      throw new Error("HTTP " + res.status + " for " + url);
+    return new Uint8Array(yield res.arrayBuffer());
   });
 }
 function parseQuality(raw) {
@@ -512,42 +522,296 @@ function enabled(key) {
     return true;
   }
 }
+var VA_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function vaBase64(str) {
+  const clean = String(str || "").replace(/[^A-Za-z0-9+/]/g, "");
+  const map = {};
+  for (let i = 0; i < VA_B64.length; i++)
+    map[VA_B64[i]] = i;
+  const out = [];
+  for (let i = 0; i < clean.length; i += 4) {
+    const c0 = map[clean[i]];
+    const c1 = i + 1 < clean.length ? map[clean[i + 1]] : null;
+    const c2 = i + 2 < clean.length ? map[clean[i + 2]] : null;
+    const c3 = i + 3 < clean.length ? map[clean[i + 3]] : null;
+    if (c0 == null) continue;
+    out.push((c0 << 2) | (c1 == null ? 0 : c1 >> 4));
+    if (c2 != null) out.push(((c1 & 15) << 4) | (c2 >> 2));
+    if (c3 != null) out.push(((c2 & 3) << 6) | c3);
+  }
+  return out;
+}
+function vaUtf8(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length;) {
+    const c = bytes[i++];
+    if (c < 128) out += String.fromCharCode(c);
+    else if (c < 224) out += String.fromCharCode(((c & 31) << 6) | (bytes[i++] & 63));
+    else if (c < 240) out += String.fromCharCode(((c & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63));
+    else {
+      let cp = ((c & 7) << 18) | ((bytes[i++] & 63) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+      cp -= 65536;
+      out += String.fromCharCode(55296 + (cp >> 10), 56320 + (cp & 1023));
+    }
+  }
+  return out;
+}
+function vaRotl(x, n) {
+  return ((x << n) | (x >>> (32 - n))) >>> 0;
+}
+function vaQuarter(s, a, b, c, d) {
+  s[a] = (s[a] + s[b]) >>> 0;
+  s[d] = vaRotl(s[d] ^ s[a], 16);
+  s[c] = (s[c] + s[d]) >>> 0;
+  s[b] = vaRotl(s[b] ^ s[c], 12);
+  s[a] = (s[a] + s[b]) >>> 0;
+  s[d] = vaRotl(s[d] ^ s[a], 8);
+  s[c] = (s[c] + s[d]) >>> 0;
+  s[b] = vaRotl(s[b] ^ s[c], 7);
+}
+function vaBlock(key, counter, nonce) {
+  const s = [1634760805, 857760878, 2036477234, 1797285236];
+  for (let i = 0; i < 8; i++) {
+    s.push(
+      key[i * 4] |
+      key[i * 4 + 1] << 8 |
+      key[i * 4 + 2] << 16 |
+      key[i * 4 + 3] << 24
+    );
+  }
+  s.push(counter >>> 0);
+  s.push(nonce[0] | nonce[1] << 8 | nonce[2] << 16 | nonce[3] << 24);
+  s.push(nonce[4] | nonce[5] << 8 | nonce[6] << 16 | nonce[7] << 24);
+  s.push(nonce[8] | nonce[9] << 8 | nonce[10] << 16 | nonce[11] << 24);
+  const w = s.slice();
+  for (let round = 0; round < 10; round++) {
+    vaQuarter(w, 0, 4, 8, 12);
+    vaQuarter(w, 1, 5, 9, 13);
+    vaQuarter(w, 2, 6, 10, 14);
+    vaQuarter(w, 3, 7, 11, 15);
+    vaQuarter(w, 0, 5, 10, 15);
+    vaQuarter(w, 1, 6, 11, 12);
+    vaQuarter(w, 2, 7, 8, 13);
+    vaQuarter(w, 3, 4, 9, 14);
+  }
+  const out = [];
+  for (let i = 0; i < 16; i++) {
+    const v = (w[i] + s[i]) >>> 0;
+    out.push(v & 255, v >>> 8 & 255, v >>> 16 & 255, v >>> 24 & 255);
+  }
+  return out;
+}
+function vaDecryptStreamUrls(encoded, key) {
+  const raw = vaBase64(encoded);
+  if (raw.length <= 12)
+    return "";
+  const nonce = raw.slice(0, 12);
+  const out = [];
+  for (let offset = 12, counter = 0; offset < raw.length; offset += 64, counter++) {
+    const block = vaBlock(key, counter, nonce);
+    for (let i = 0; i < 64 && offset + i < raw.length; i++)
+      out.push(raw[offset + i] ^ block[i]);
+  }
+  return vaUtf8(out);
+}
+function vaUleb(bytes, pos) {
+  let result = 0;
+  let shift = 0;
+  let byte;
+  do {
+    byte = bytes[pos++];
+    result |= (byte & 127) << shift;
+    shift += 7;
+  } while (byte & 128);
+  return [result >>> 0, pos];
+}
+function vaDataSegments(bytes) {
+  const segments = [];
+  let pos = 8;
+  while (pos < bytes.length) {
+    const id = bytes[pos++];
+    let size;
+    [size, pos] = vaUleb(bytes, pos);
+    const end = pos + size;
+    if (id === 11) {
+      let count;
+      [count, pos] = vaUleb(bytes, pos);
+      for (let i = 0; i < count && pos < end; i++) {
+        let flags;
+        [flags, pos] = vaUleb(bytes, pos);
+        if (flags === 1) {
+          let len;
+          [len, pos] = vaUleb(bytes, pos);
+          pos += len;
+          continue;
+        }
+        if (flags === 2) {
+          let memidx;
+          [memidx, pos] = vaUleb(bytes, pos);
+        }
+        if (bytes[pos++] !== 65)
+          return segments;
+        let value = 0;
+        let shift = 0;
+        let byte;
+        do {
+          byte = bytes[pos++];
+          value |= (byte & 127) << shift;
+          shift += 7;
+        } while (byte & 128);
+        if (byte & 64)
+          value |= -1 << shift;
+        if (bytes[pos++] !== 11)
+          return segments;
+        let len;
+        [len, pos] = vaUleb(bytes, pos);
+        segments.push(bytes.slice(pos, pos + len));
+        pos += len;
+      }
+      return segments;
+    }
+    pos = end;
+  }
+  return segments;
+}
+function vaKeyFromWasm(bytes, encoded) {
+  const candidates = vaDataSegments(bytes).filter(function(segment) {
+    return segment.length === 32;
+  });
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const key = [];
+      for (let k = 0; k < 32; k++)
+        key.push(candidates[i][k] ^ candidates[j][k]);
+      if (/^https?:\/\//.test(vaDecryptStreamUrls(encoded, key)))
+        return key;
+    }
+  }
+  return null;
+}
+function vaParseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return null;
+  }
+}
+function vaParseConfig(html) {
+  const match = String(html || "").match(/const CONFIG = (\{[\s\S]*?\});/);
+  return match ? vaParseJson(match[1]) : null;
+}
+function vaHostToken(origin, apiToken) {
+  return fetchText(
+    origin + "/generate.php?api_token=" + encodeURIComponent(apiToken),
+    {},
+    15e3
+  ).then(function(text) {
+    const raw = String(text || "").trim();
+    if (raw && (raw.charAt(0) === "{" || raw.charAt(0) === "[")) {
+      const json = vaParseJson(raw);
+      if (typeof json === "string")
+        return json;
+      if (json)
+        return json.token || json.data || json.string || json.result || "";
+    }
+    return raw;
+  }).catch(function() {
+    return "";
+  });
+}
+function vaApplyToken(url, token) {
+  if (!token)
+    return url;
+  return url + (url.indexOf("?") > -1 ? "&" : "?") + "token=" + encodeURIComponent(token);
+}
+
 function scrapeVaplayer(ctx) {
   return __async(this, null, function* () {
     if (!enabled("vaplayer"))
       return [];
     if (!ctx.imdbId)
       return [];
-    const url = !ctx.isTv ? VAPLAYER_API + "/api.php?imdb=" + ctx.imdbId + "&type=movie" : VAPLAYER_API + "/api.php?imdb=" + ctx.imdbId + "&type=tv&season=" + ctx.season + "&episode=" + ctx.episode;
+    const embedPath = ctx.isTv
+      ? "/embed/tv/" + ctx.imdbId + "/" + ctx.season + "/" + ctx.episode
+      : "/embed/movie/" + ctx.imdbId;
+    let payload;
+    let config;
     try {
-      const json = JSON.parse(
-        yield fetchText(url, { Referer: "https://nextgencloudfabric.com/" }, 2e4)
+      const wrapper = vaParseJson(
+        yield fetchText(VAPLAYER_WRAPPER + "/embed/va_src.php?path=" + encodeURIComponent(embedPath), { Referer: VAPLAYER_WRAPPER + embedPath }, 2e4)
       );
-      const data = json && json.data || {};
-      const urls = data.stream_urls || [];
-      const subs = (json && json.default_subs || []).filter(function(s) {
-        return s && s.url;
-      }).map(function(s) {
-        return {
-          url: s.url,
-          language: s.lang || s.code || "en",
-          name: (s.lang || s.code || "Subtitle") + " [VaPlayer]"
-        };
-      });
-      return urls.map(function(u) {
-        return makeStream(
-          "VaPlayer",
-          "VaPlayer [HLS]",
-          u,
-          "Auto",
-          { Referer: "https://nextgencloudfabric.com/" },
-          subs.slice(0, 8)
-        );
-      }).filter(Boolean);
+      if (!wrapper || !wrapper.src)
+        return [];
+      const html = yield fetchText(wrapper.src, { Referer: VAPLAYER_WRAPPER + "/" }, 2e4);
+      config = vaParseConfig(html);
+      if (!config || !config.apiToken)
+        return [];
+      let apiUrl = (config.streamDataApiUrl || VAPLAYER_API) +
+        "?imdb=" + encodeURIComponent(ctx.imdbId) +
+        "&type=" + (ctx.isTv ? "tv" : "movie");
+      if (ctx.isTv)
+        apiUrl += "&season=" + ctx.season + "&episode=" + ctx.episode;
+      apiUrl += "&stream_urls&api_token=" + encodeURIComponent(config.apiToken);
+      payload = vaParseJson(
+        yield fetchText(apiUrl, { Referer: wrapper.src, Origin: VA_STREAM_REFERER.slice(0, -1) }, 2e4)
+      );
     } catch (e) {
       console.log("[Streamline][vaplayer] " + e.message);
       return [];
     }
+    const data = payload && payload.data || {};
+    let urls = data.stream_urls;
+    if (typeof urls === "string") {
+      let key = null;
+      try {
+        const wasmUrl = payload.va && payload.va.wasm_url ||
+          (payload.va && payload.va.w ? VAPLAYER_API.replace("/api.php", "/wasm.php?w=" + payload.va.w) : "");
+        if (wasmUrl)
+          key = vaKeyFromWasm(yield fetchBytes(wasmUrl, { "User-Agent": UA }, 2e4), urls);
+      } catch (e) {
+        console.log("[Streamline][vaplayer] wasm " + e.message);
+      }
+      if (!key)
+        return [];
+      urls = vaDecryptStreamUrls(urls, key).split("\n").map(function(u) {
+        return u.trim();
+      }).filter(Boolean);
+    }
+    if (!Array.isArray(urls) || !urls.length)
+      return [];
+    const tokens = {};
+    const origins = {};
+    urls.forEach(function(u) {
+      const match = String(u).match(/^(https?:\/\/[^\/]+)/i);
+      if (match)
+        origins[match[1]] = 1;
+    });
+    yield Promise.all(Object.keys(origins).map(function(origin) {
+      return vaHostToken(origin, config.apiToken || "").then(function(token) {
+        tokens[origin] = token;
+      });
+    }));
+    const subs = (payload.default_subs || []).filter(function(s) {
+      return s && s.url;
+    }).map(function(s) {
+      return {
+        url: s.url,
+        language: s.lang || s.code || "en",
+        name: (s.lang || s.code || "Subtitle") + " [VaPlayer]"
+      };
+    });
+    return urls.map(function(url) {
+      const match = String(url).match(/^(https?:\/\/[^\/]+)/i);
+      const token = match ? tokens[match[1]] : "";
+      return makeStream(
+        "VaPlayer",
+        "VaPlayer [HLS]",
+        vaApplyToken(url, token),
+        "Auto",
+        { "User-Agent": UA, Referer: VA_STREAM_REFERER, Origin: VA_STREAM_REFERER.slice(0, -1) },
+        subs.slice(0, 8)
+      );
+    }).filter(Boolean);
   });
 }
 
@@ -555,7 +819,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
   return __async(this, null, function* () {
     try {
       const ctx = yield buildCtx(tmdbId, mediaType, season, episode);
-      const out = yield withTimeout(scrapeVaplayer(ctx), 2e4, "vaplayer");
+      const out = yield withTimeout(scrapeVaplayer(ctx), 4e4, "vaplayer");
       return presentStreams(dedupe(out), ctx);
     } catch (e) {
       console.log("[Streamline][vaplayer] " + (e && e.message));
