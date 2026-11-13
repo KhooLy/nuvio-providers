@@ -19,7 +19,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **MoviesDrive** | `moviesdrive` | Movies & Series | EN / HI, HubCloud & Pixeldrain | `moviesdrive.christmas` |
 | **VaPlayer** | `vaplayer` | Movies & Series | HLS | `vaplayer.ru` |
 | **2Peckle** | `2peckle` | Movies & Series | Direct MP4 | Pengu addon |
-| **ToonWorld4All** | `toonworld4all` | Animated Movies & Series | EN / HI direct links | `toonworld4all.me` |
 | **LaMovie** | `lamovie` | Movies & Series | ES / EN HLS | `lamovie.org` |
 | **KissKH** | `kisskh` | Asian Drama & Anime Series | HLS + subtitles | `kisskh.co` |
 | **VegaMovies** | `vegamovies` | Movies & Series | EN / HI, Google & GDTot | `vegamovies.lease` |

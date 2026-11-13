@@ -247,30 +247,6 @@
       "supportsExternalPlayer": true
     },
     {
-      "id": "toonworld4all",
-      "name": "ToonWorld4All",
-      "description": "Animated movies and series via ToonWorld4All with direct links",
-      "version": "1.0.0",
-      "author": "KhooLy",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "filename": "providers/toonworld4all.js",
-      "enabled": true,
-      "hasSettings": false,
-      "formats": [
-        "mkv",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "en",
-        "hi"
-      ],
-      "disabledPlatforms": [],
-      "supportsExternalPlayer": true
-    },
-    {
       "id": "lamovie",
       "name": "LaMovie",
       "description": "Movies and series via LaMovie with HLS streams",
