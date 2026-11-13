@@ -27,6 +27,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |
 | **1Shows** | `oneshows` | Movies & Series | HLS via Vidy / VidFast / VidLink / VidRock, multi-language subs | `1shows.org` |
 | **321Movies** | `321movies` | Movies & Series | Adaptive HLS via the VixSrc backend, multi-audio & subs | `vixsrc.to` |
+| **67Movies** | `67movies` | Movies & Series | HLS & MP4 via VidQueen servers, multi-language subs | `67movies.st` |
 
 ---
 
@@ -97,6 +98,10 @@ node -e 'require("./providers/oneshows.js").getStreams("1399", "tv", 1, 1).then(
 # Test 321Movies
 node -e 'require("./providers/321movies.js").getStreams("27205", "movie").then(console.log)'
 node -e 'require("./providers/321movies.js").getStreams("1399", "tv", 1, 1).then(console.log)'
+
+# Test 67Movies
+node -e 'require("./providers/67movies.js").getStreams("27205", "movie").then(console.log)'
+node -e 'require("./providers/67movies.js").getStreams("95557", "tv", 1, 1).then(console.log)'
 ```
 
 ---
