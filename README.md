@@ -6,8 +6,6 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 
 | Provider | ID | Content | Audio / Subs | Source |
 | :--- | :--- | :--- | :--- | :--- |
-| **Cinefreak** | `cinefreak` | Movies & Series | EN / HI, direct links | `cinefreak.net` |
-| **Vidy** | `vidy` | Movies & Series | HLS up to 4K, multi-audio | `vidy.st` |
 | **Hianime** | `hianime` | Anime Series | SUB & DUB (9 Subtitle languages) | `hianime.ms` |
 | **Anikoto** | `anikoto` | Anime Series | SUB & DUB (multi-language subtitles) | `anikoto.cz` |
 | **HDHub** | `hdhub` | Movies & Series | Direct MKV | `4khdhub.one` |
@@ -23,10 +21,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **2Peckle** | `2peckle` | Movies & Series | Direct MP4 | Pengu addon |
 | **LaMovie** | `lamovie` | Movies & Series | ES / EN HLS | `lamovie.org` |
 | **KissKH** | `kisskh` | Asian Drama & Anime Series | HLS + subtitles | `kisskh.co` |
-| **VegaMovies** | `vegamovies` | Movies & Series | EN / HI, Google & GDTot | `vegamovies.lease` |
 | **Cinejoy** | `cinejoy` | Movies & Series | HLS + Stremio subtitles | `cinejoy.pk` |
-| **Obejrzyj** | `obejrzyj` | Movies & Series | PL embeds (CDA / Vider) | `obejrzyj.to` |
-| **PremiumSmart** | `premiumsmart` | Movies & Series | PL HLS & embeds | `premiumsmart.eu` |
 | **1Shows** | `oneshows` | Movies & Series | HLS via Vidy / VidFast / VidLink / VidRock, multi-language subs | `1shows.org` |
 | **321Movies** | `321movies` | Movies & Series | Adaptive HLS via the VixSrc backend, multi-audio & subs | `vixsrc.to` |
 | **67Movies** | `67movies` | Movies & Series | HLS & MP4 via VidQueen servers, multi-language subs | `67movies.st` |
