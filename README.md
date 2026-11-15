@@ -14,6 +14,7 @@ Multi-provider package for **Nuvio**, featuring scrapers for movie, series and a
 | **CizgiMax** | `cizgimax` | Turkish Cartoon/Anime Series | TR (multi-quality MP4) | `cizgimax.online` |
 | **SezonlukDizi** | `sezonlukdizi` | Turkish Series | TR Dublaj/Altyazı HLS | `sezonlukdizi.cc` |
 | **DiziPal** | `dizipal` | Movies & Series | TR Dublaj/Altyazı HLS | rotating (via `t.ly/dizipalgiris`) |
+| **Diziyou** | `diziyou` | Turkish Series | TR Dublaj/Altyazı HLS | `diziyou.one` |
 | **DiziBOX** | `dizibox` | Turkish Series | TR Dublaj/Altyazı HLS | `dizibox.live` |
 | **MovieBox** | `moviebox` | Movies & Series | Direct MP4 | MovieBox API |
 | **MoviesDrive** | `moviesdrive` | Movies & Series | EN / HI, HubCloud & Pixeldrain | `moviesdrive.christmas` |
