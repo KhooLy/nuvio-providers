@@ -51,21 +51,23 @@ function text(value) {
 function tmdbMeta(tmdbId, mediaType) {
     var isTv = (mediaType === "tv" || mediaType === "series");
     var type = isTv ? "tv" : "movie";
-    var url = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR&append_to_response=external_ids";
+    var url = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR&append_to_response=external_ids,alternative_titles";
     return fetchJson(url).then(function (data) {
         if (!data || (!data.title && !data.name)) {
-            return fetchJson("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&append_to_response=external_ids");
+            return fetchJson("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&append_to_response=external_ids,alternative_titles");
         }
         return data;
     }).then(function (data) {
         if (!data) return null;
         var ext = data.external_ids || {};
+        var alt = data.alternative_titles && data.alternative_titles.results ? data.alternative_titles.results : [];
         return {
             isTv: isTv,
             imdbId: data.imdb_id || ext.imdb_id || "",
             title: data.title || data.name || data.original_title || data.original_name || "",
             original: data.original_title || data.original_name || "",
-            year: String(data.release_date || data.first_air_date || "").split("-")[0]
+            year: String(data.release_date || data.first_air_date || "").split("-")[0],
+            alternatives: alt.map(function (item) { return item.title || item.name || ""; }).filter(Boolean)
         };
     });
 }
@@ -521,29 +523,68 @@ function tryCandidates(meta, items) {
     });
 }
 
+function uniqueTerms(terms) {
+    var out = [], seen = {};
+    for (var i = 0; i < terms.length; i++) {
+        var term = String(terms[i] || "").trim();
+        var key = normalize(term);
+        if (!term || seen[key]) continue;
+        seen[key] = true;
+        out.push(term);
+    }
+    return out;
+}
+
+function collectItems(groups, seen) {
+    var items = [];
+    for (var g = 0; g < groups.length; g++) {
+        for (var i = 0; i < groups[g].length; i++) {
+            var item = groups[g][i];
+            if (!item || !item.url || seen[item.url]) continue;
+            seen[item.url] = true;
+            items.push(item);
+        }
+    }
+    return items;
+}
+
+function alternativeTerms(meta, used) {
+    var alts = uniqueTerms(meta.alternatives || []);
+    var out = [];
+    for (var i = 0; i < alts.length; i++) {
+        var term = alts[i];
+        if (used[normalize(term)] || term.length < 3 || term.length > 60) continue;
+        if (!/^[\x20-\x7E]+$/.test(term)) continue;
+        out.push(term);
+        if (out.length >= 8) break;
+    }
+    return out;
+}
+
 function getStreams(tmdbId, mediaType, season, episode) {
     console.log("[HFC][START] tmdbId=" + tmdbId + " type=" + mediaType + " s=" + season + " e=" + episode);
     return tmdbMeta(tmdbId, mediaType).then(function (meta) {
         if (!meta || !meta.title) { console.log("[HFC][TMDB] no meta for id=" + tmdbId); return null; }
         meta.season = season;
         meta.episode = episode;
-        console.log("[HFC][TMDB] TR=" + meta.title + " EN=" + meta.original + " year=" + meta.year);
-        var terms = [meta.title];
-        if (meta.original && normalize(meta.original) !== normalize(meta.title)) terms.push(meta.original);
+        console.log("[HFC][TMDB] TR=" + meta.title + " EN=" + meta.original + " alt=" + (meta.alternatives || []).length + " year=" + meta.year);
+        var terms = uniqueTerms([meta.title, meta.original]);
+        var used = {};
+        for (var i = 0; i < terms.length; i++) used[normalize(terms[i])] = true;
         return Promise.all(terms.map(search)).then(function (groups) {
-            var items = [], seen = {};
-            for (var g = 0; g < groups.length; g++) {
-                for (var i = 0; i < groups[g].length; i++) {
-                    var item = groups[g][i];
-                    if (!item || !item.url || seen[item.url]) continue;
-                    seen[item.url] = true;
-                    items.push(item);
-                }
-            }
+            var seen = {};
+            var items = collectItems(groups, seen);
             var ranked = rankCandidates(items, meta);
             console.log("[HFC][MATCH] candidates=" + ranked.length);
-            if (!ranked.length) return [];
-            return tryCandidates(meta, ranked);
+            if (ranked.length) return tryCandidates(meta, ranked);
+            var alts = alternativeTerms(meta, used);
+            if (!alts.length) return [];
+            console.log("[HFC][ALT] terms=" + alts.join(" | "));
+            return Promise.all(alts.map(search)).then(function (altGroups) {
+                var altRanked = rankCandidates(collectItems(altGroups, seen), meta);
+                console.log("[HFC][ALT] candidates=" + altRanked.length);
+                return altRanked.length ? tryCandidates(meta, altRanked) : [];
+            });
         });
     }).then(function (streams) {
         var out = streams || [];
