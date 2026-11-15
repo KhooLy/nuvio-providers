@@ -114,6 +114,28 @@
       "supportsExternalPlayer": true
     },
     {
+      "id": "hdfilmcehennemi",
+      "name": "Hdfilmcehennemi",
+      "description": "Turkish dubbed and subtitled movies and series in HLS from hdfilmcehennemi.nl",
+      "version": "1.0.0",
+      "author": "KhooLy",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/hdfilmcehennemi.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "tr"
+      ],
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
       "id": "diziyou",
       "name": "Diziyou",
       "description": "Turkish dubbed and subtitled series in HLS from diziyou.one",
