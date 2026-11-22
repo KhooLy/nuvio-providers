@@ -356,6 +356,39 @@ function getFormatType(url) {
     return "MKV";
   return "VIDEO";
 }
+function getAndroidUserAgent() {
+  initializeSession();
+  return `${PACKAGE_INFO.package_name}/${PACKAGE_INFO.version_code} (Linux; U; Android 14; en_IN; ${selectedModel}; Build/UD1A.230803.041; Cronet/145.0.7582.0)`;
+}
+function isPlaceholderStream(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (e) {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host === "macdn.aoneroom.com" && parsed.pathname.indexOf("/other/") === 0)
+    return true;
+  if (parsed.pathname.indexOf("b164fbfb4347792950bdfbfb563d39d9") !== -1)
+    return true;
+  return /\/notice\.mp4$/i.test(parsed.pathname);
+}
+function isDirectMediaUrl(url) {
+  return /\.(mp4|mkv|webm)(?:$|[?#])/i.test(String(url || ""));
+}
+function buildMediaHeaders(url, signCookie, signHeaderKey, playbackHeaders) {
+  if (isDirectMediaUrl(url)) {
+    const headers = {
+      "User-Agent": getAndroidUserAgent(),
+      "Accept": "*/*"
+    };
+    if (signCookie)
+      headers[signHeaderKey] = signCookie;
+    return headers;
+  }
+  return __spreadValues(__spreadValues({}, playbackHeaders), signCookie ? { [signHeaderKey]: signCookie } : {});
+}
 function extractPolicyResource(signCookie) {
   var _a, _b;
   if (!signCookie || typeof signCookie !== "string")
@@ -597,6 +630,34 @@ function getStreamLinks(subjectId, season = 0, episode = 0, mediaTitle = "", med
       "x-vip-restrict": "0",
       "x-no-high-risk-restrict": "0"
     };
+    const seenUrls = new Set();
+    function addDetectorStreams(detectors, lang) {
+      if (!Array.isArray(detectors))
+        return;
+      for (const detector of detectors) {
+        if (!Array.isArray(detector.resolutionList))
+          continue;
+        for (const video of detector.resolutionList) {
+          const link = video.resourceLink || video.downloadUrl;
+          if (!link || isPlaceholderStream(link) || seenUrls.has(link))
+            continue;
+          const se = video.se != null ? video.se : 0;
+          const ep = video.ep != null ? video.ep : 0;
+          if ((season > 0 || episode > 0) && (se !== season || ep !== episode))
+            continue;
+          const quality = video.resolution ? `${video.resolution}p` : "Auto";
+          allStreams.push({
+            name: "MovieBox",
+            title: `${mediaTitle}${season > 0 ? ` S${season}E${episode}` : ""} - ${quality} (${getAudioLabel({}, lang)}) [${getFormatType(link)}]`,
+            url: link,
+            quality,
+            headers: buildMediaHeaders(link, null, "Cookie", playbackHeaders),
+            provider: "moviebox"
+          });
+          seenUrls.add(link);
+        }
+      }
+    }
     for (const item of subjectIds) {
       try {
         const playParams = new URLSearchParams({ subjectId: item.id, se: season, ep: episode, streamSignType: "1" });
@@ -607,8 +668,10 @@ function getStreamLinks(subjectId, season = 0, episode = 0, mediaTitle = "", med
         const playUrl = `${API_BASE}/wefeed-mobile-bff/subject-api/play-info?${playParams.toString()}`;
         const playRes = yield movieBoxRequest("GET", playUrl, null, playbackHeaders);
         let hasValidStream = false;
+        let playbackData = null;
         if (playRes && playRes.data && playRes.data.data) {
           const playData = playRes.data.data;
+          playbackData = playData;
           const streamsList = collectStreams(playData);
           if (Array.isArray(streamsList) && streamsList.length > 0) {
             for (const stream of streamsList) {
@@ -616,11 +679,7 @@ function getStreamLinks(subjectId, season = 0, episode = 0, mediaTitle = "", med
               const signCookie = stream.signCookie || null;
               const policyUrl = extractPolicyResource(signCookie);
               const finalStreamUrl = policyUrl || rawStreamUrl;
-              if (!finalStreamUrl)
-                continue;
-              if (finalStreamUrl.includes("b164fbfb4347792950bdfbfb563d39d9"))
-                continue;
-              if (finalStreamUrl === rawStreamUrl && rawStreamUrl.includes("/other/2026/09/"))
+              if (!finalStreamUrl || isPlaceholderStream(finalStreamUrl))
                 continue;
               let formatType = getFormatType(finalStreamUrl);
               if (stream.format) {
@@ -639,45 +698,28 @@ function getStreamLinks(subjectId, season = 0, episode = 0, mediaTitle = "", med
                 title: `${mediaTitle}${season > 0 ? ` S${season}E${episode}` : ""} - ${quality} (${audioLabel}) [${formatType}]`,
                 url: finalStreamUrl,
                 quality,
-                headers: __spreadValues(__spreadValues({}, playbackHeaders), signCookie ? { [signHeaderKey]: signCookie } : {}),
+                headers: buildMediaHeaders(finalStreamUrl, signCookie, signHeaderKey, playbackHeaders),
                 subtitles,
                 provider: "moviebox"
               });
+              seenUrls.add(finalStreamUrl);
               hasValidStream = true;
             }
           }
-          if (!hasValidStream) {
-            let detectors = playData.resourceDetectors;
-            if (!Array.isArray(detectors)) {
-              detectors = subjectData.resourceDetectors;
-            }
-            if (Array.isArray(detectors)) {
-              for (const detector of detectors) {
-                if (Array.isArray(detector.resolutionList)) {
-                  for (const video of detector.resolutionList) {
-                    if (!video.resourceLink)
-                      continue;
-                    const se = video.se != null ? video.se : 0;
-                    const ep = video.ep != null ? video.ep : 0;
-                    if ((season > 0 || episode > 0) && (se !== season || ep !== episode)) {
-                      continue;
-                    }
-                    const quality = video.resolution ? `${video.resolution}p` : "Auto";
-                    const audioLabel = getAudioLabel({}, item.lang);
-                    allStreams.push({
-                      name: "MovieBox",
-                      title: `${mediaTitle}${season > 0 ? ` S${season}E${episode}` : ""} - ${quality} (${audioLabel}) [Fallback]`,
-                      url: video.resourceLink,
-                      quality,
-                      headers: __spreadValues({}, playbackHeaders),
-                      provider: "moviebox"
-                    });
-                  }
-                }
-              }
-            }
+        }
+        let detectors = playbackData && playbackData.resourceDetectors;
+        if (!Array.isArray(detectors) || detectors.length === 0) {
+          if (item.id === subjectId) {
+            detectors = subjectData.resourceDetectors;
+          } else if (!hasValidStream) {
+            const dubDetailUrl = `${API_BASE}/wefeed-mobile-bff/subject-api/get?subjectId=${item.id}`;
+            const dubDetail = yield movieBoxRequest("GET", dubDetailUrl);
+            detectors = dubDetail && dubDetail.data && dubDetail.data.data ? dubDetail.data.data.resourceDetectors : null;
+          } else {
+            detectors = null;
           }
         }
+        addDetectorStreams(detectors, item.lang);
       } catch (err) {
         console.error(`[MovieBox Stream Fetch Error] ID: ${item.id}`, err.message);
       }
