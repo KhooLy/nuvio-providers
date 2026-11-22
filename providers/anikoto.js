@@ -435,15 +435,11 @@ function resolveServer(link, referer) {
 }
 
 function resolveMegaplay(embedUrl, type) {
-    var sMatch = /[?&]s=([^&]+)/.exec(embedUrl);
-    var s = sMatch ? decodeURIComponent(sMatch[1]) : "";
-
     return fetchText(embedUrl, MEGAPLAY_HEADERS).then(function (html) {
         var idMatch = /data-id="(\d+)"/.exec(html || "");
         if (!idMatch) return null;
 
         var api = MEGAPLAY_BASE + "/stream/getSourcesNew?id=" + idMatch[1] + "&type=" + type;
-        if (s) api += "&s=" + encodeURIComponent(s);
 
         return fetchJson(api, ajaxHeaders(MEGAPLAY_BASE + "/")).then(function (data) {
             if (!data) return null;
@@ -497,7 +493,8 @@ function buildStream(servers, referer, type, showTitle) {
                         subs.push({
                             url: t.file,
                             language: langCodeFromLabel(t.label),
-                            name: t.label || "Subtitle"
+                            name: t.label || "Subtitle",
+                            headers: MEGAPLAY_HEADERS
                         });
                     }
                 }
